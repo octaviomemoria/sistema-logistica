@@ -1,93 +1,196 @@
-# Sistema Logística Inteligente
+<div align="center">
 
-Sistema completo de gestão de expedição de pedidos para distribuidoras, desenvolvido em português com integração a ERP SAP Business One e WMS Expert.
+# 🚚 Sistema Logística Inteligente
 
-## 📋 Visão Geral
+### Plataforma completa de gestão de expedição para distribuidoras
 
-O Sistema Logística Inteligente é uma plataforma completa que automatiza e otimiza os processos de expedição, garantindo entregas pontuais e rastreabilidade completa. O sistema integra todas as etapas desde o faturamento até a entrega final com comprovante digital.
+[![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-14-black?style=for-the-badge&logo=next.js&logoColor=white)](https://nextjs.org/)
+[![Node.js](https://img.shields.io/badge/Node.js-20-339933?style=for-the-badge&logo=node.js&logoColor=white)](https://nodejs.org/)
+[![Supabase](https://img.shields.io/badge/Supabase-3ECF8E?style=for-the-badge&logo=supabase&logoColor=white)](https://supabase.com/)
+[![TailwindCSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com/)
 
-## 🏗 Arquitetura
+[Funcionalidades](#-funcionalidades) • [Tecnologias](#-tecnologias) • [Instalação](#-instalação) • [Uso](#-uso) • [API](#-api-endpoints) • [Roadmap](#-roadmap)
 
-**Stack Tecnológico:**
-- **Backend:** Node.js + Express + TypeScript
-- **Frontend:** Next.js 14 + React + TypeScript + Tailwind CSS
-- **Banco de Dados:** Supabase (PostgreSQL)
-- **Autenticação:** Supabase Auth com Row Level Security (RLS)
-- **Armazenamento:** Google Drive API (comprovantes de entrega)
-- **Mobile:** React Native + Expo (planejado)
+</div>
+
+---
+
+## 📋 Sobre o Projeto
+
+O **Sistema Logística Inteligente** é uma solução completa e moderna para gestão de expedição em distribuidoras. Automatiza todo o fluxo desde o faturamento até a entrega final, incluindo separação de pedidos, roteirização inteligente, rastreamento em tempo real e comprovante digital de entrega.
+
+### 🎯 Problema que Resolve
+
+- ❌ Gestão manual e desorganizada de expedições
+- ❌ Falta de rastreabilidade dos pedidos
+- ❌ Perda de comprovantes físicos de entrega
+- ❌ Dificuldade em otimizar rotas de entrega
+- ❌ Ausência de métricas e indicadores de desempenho
+
+### ✅ Benefícios
+
+- ✨ **Rastreabilidade completa** - Acompanhe cada pedido em tempo real
+- 📊 **Dashboard inteligente** - KPIs e métricas atualizadas
+- 🗺️ **Roteirização otimizada** - Economia de combustível e tempo
+- 📱 **Apps Mobile** - Separadores e motoristas com apps dedicados
+- ☁️ **Comprovantes digitais** - Armazenamento seguro no Google Drive
+- 🔒 **Segurança avançada** - Row Level Security (RLS) no banco de dados
+
+---
+
+## ✨ Funcionalidades
+
+### 🖥️ **Web Admin**
+- [x] **Dashboard em tempo real**
+  - KPIs de expedição e entregas
+  - Gráficos de desempenho
+  - Alertas de pedidos atrasados
+  
+- [x] **Gestão de Pedidos**
+  - Listagem com filtros avançados
+  - Timeline completa do pedido
+  - Detalhes de itens e status
+
+- [x] **Separação de Pedidos**
+  - Interface de separação item por item
+  - Suporte a leitor de código de barras
+  - Barra de progresso visual
+  - Priorização automática
+
+- [ ] **Roteirização Inteligente** *(em desenvolvimento)*
+  - Montagem de rotas por região
+  - Visualização em mapa
+  - Otimização automática de trajetos
+
+- [ ] **Relatórios** *(planejado)*
+  - Relatórios de expedição
+  - Desempenho de motoristas
+  - Tempo médio de entrega
+  - Exportação Excel/PDF
+
+### 📱 **Apps Mobile** *(planejado)*
+- [ ] **App Separadores**
+  - Scanner de código de barras
+  - Confirmação de itens
+  
+- [ ] **App Motoristas**
+  - Rotas do dia com GPS
+  - Captura de assinatura digital
+  - Foto do comprovante
+  - Registro de ocorrências
+
+### 🔌 **Integrações**
+- [ ] SAP Business One
+- [ ] WMS Expert
+- [x] Google Drive (comprovantes)
+
+---
+
+## 🏗️ Tecnologias
+
+### Backend
+- **Node.js 20** - Runtime JavaScript
+- **Express** - Framework web minimalista
+- **TypeScript** - Tipagem estática
+- **Supabase** - Backend as a Service (PostgreSQL)
+- **Winston** - Sistema de logs
+- **Google Drive API** - Armazenamento de arquivos
+
+### Frontend
+- **Next.js 14** - Framework React com App Router
+- **React 18** - Biblioteca UI
+- **TypeScript** - Tipagem estática
+- **Tailwind CSS** - Framework CSS utilitário
+- **Zustand** - Gerenciamento de estado
+- **Axios** - Cliente HTTP
+- **Lucide React** - Ícones modernos
+
+### Banco de Dados
+- **PostgreSQL** (via Supabase)
+- **16 tabelas** relacionadas
+- **Row Level Security (RLS)**
+- **Triggers e Views** otimizadas
+- **Funções PL/pgSQL** customizadas
+
+---
 
 ## 📂 Estrutura do Projeto
 
 ```
-Sistema Logistica/
-├── database/                    # Scripts SQL do banco
-│   ├── schema.sql              # Tabelas principais
-│   ├── views_triggers.sql      # Views, triggers e funções
-│   ├── rls_policies.sql        # Políticas de segurança
-│   └── README.md               # Documentação
-├── backend/                     # API REST Node.js
+sistema-logistica/
+│
+├── database/                      # 📊 Scripts SQL
+│   ├── schema.sql                # Tabelas principais
+│   ├── views_triggers.sql        # Views e triggers
+│   ├── rls_policies.sql          # Políticas de segurança
+│   └── README.md
+│
+├── backend/                       # 🔧 API REST
 │   ├── src/
-│   │   ├── config/             # Configurações (Supabase, Google Drive)
-│   │   ├── middlewares/        # Auth, error handler
-│   │   ├── routes/             # Rotas da API
-│   │   ├── utils/              # Logger, helpers
-│   │   └── server.ts           # Servidor principal
+│   │   ├── config/               # Configurações (Supabase, Google Drive)
+│   │   ├── middlewares/          # Auth, error handler
+│   │   ├── routes/               # Módulos da API
+│   │   │   ├── pedidos.routes.ts
+│   │   │   ├── separacao.routes.ts
+│   │   │   ├── rotas.routes.ts
+│   │   │   ├── entregas.routes.ts
+│   │   │   ├── dashboard.routes.ts
+│   │   │   ├── relatorios.routes.ts
+│   │   │   ├── cadastros.routes.ts
+│   │   │   └── integracao.routes.ts
+│   │   ├── utils/                # Logger, helpers
+│   │   └── server.ts             # Servidor principal
+│   ├── .env.example
 │   ├── package.json
 │   └── README.md
-└── frontend/                    # Aplicação Web Next.js
-    ├── app/                     # Páginas (App Router)
-    ├── components/              # Componentes React
-    ├── lib/                     # Bibliotecas e utils
+│
+└── frontend/                      # 🎨 Aplicação Web
+    ├── app/                      # Páginas (Next.js App Router)
+    │   ├── dashboard/
+    │   ├── pedidos/
+    │   ├── separacao/
+    │   ├── roteirizacao/
+    │   ├── entregas/
+    │   ├── cadastros/
+    │   ├── relatorios/
+    │   └── login/
+    ├── components/               # Componentes reutilizáveis
+    │   ├── Sidebar.tsx
+    │   ├── Header.tsx
+    │   ├── Card.tsx
+    │   └── StatusBadge.tsx
+    ├── lib/                      # Bibliotecas e utils
+    │   ├── api.ts               # Cliente axios
+    │   ├── supabase.ts          # Cliente Supabase
+    │   ├── store.ts             # Zustand store
+    │   └── utils.ts             # Funções auxiliares
+    ├── .env.example
     ├── package.json
-    └── (em desenvolvimento)
+    └── README.md
 ```
 
-## ✨ Funcionalidades Implementadas
+---
 
-### 🗄️ Banco de Dados (Completo)
-- ✅ 16 tabelas principais:
-  - Cadastros: clientes, vendedores, regiões, transportadoras, motoristas, veículos
-  - Logística: pedidos, itens_pedido, rotas, rotas_pedidos
-  - Operação: separacoes, itens_separacao, conferencias, expedicoes, entregas
-  - Sistema: usuarios, historico_status_pedidos
-- ✅ Views otimizadas para dashboard e relatórios
-- ✅ Triggers automáticos (updated_at, histórico de status)
-- ✅ Funções auxiliares (cálculo de tempo, geração de romaneio, estatísticas)
-- ✅ Row Level Security (RLS) implementado com 5 perfis de usuário
-
-### 🔧 Backend API (Completo)
-- ✅ Autenticação e autorização via Supabase JWT
-- ✅ Endpoints completos:
-  - **Pedidos:** Listagem, detalhes, atualização de status, timeline
-  - **Dashboard:** Estatísticas em tempo real, alertas, gráficos
-  - **Separação:** Disponiveis, iniciar, confirmar itens, finalizar
-  - **Rotas:** CRUD completo, otimização, adição de pedidos
-  - **Entregas:** Rotas do motorista, registro de POD com upload
-  - **Relatórios:** Expedições, entregas, desempenho, tempos médios
-  - **Cadastros:** Clientes, vendedores, transportadoras, veículos, motoristas
-  - **Integrações:** Webhooks SAP/WMS, status de conectividade
-- ✅Integração Google Drive para upload de assinaturas e fotos
-- ✅ Middleware de tratamento de erros centralizado
-- ✅ Logger com Winston (arquivos de log)
-- ✅ Validação de dados com express-validator
-
-### 🎨 Frontend Web (Em Desenvolvimento)
-- ✅ Projeto Next.js 14 configurado
-- ✅ Tailwind CSS com sistema de design tokens
-- ✅ Suporte a dark mode
-- ⏳ Páginas principais (em andamento)
-- ⏳ Componentes reutilizáveis (em andamento)
-
-## 🚀 Como Executar
+## 🚀 Instalação
 
 ### Pré-requisitos
-- Node.js 20+
-- Conta no Supabase
-- Credenciais do Google Drive API (opcional)
 
-### 1. Configurar Banco de Dados
+- Node.js 20+ ([Download](https://nodejs.org/))
+- Conta no Supabase ([Criar grátis](https://supabase.com/))
+- Git ([Download](https://git-scm.com/))
 
-Acesse seu projeto Supabase e execute os scripts na ordem:
+### 1️⃣ Clone o Repositório
+
+```bash
+git clone https://github.com/octaviomemoria/sistema-logistica.git
+cd sistema-logistica
+```
+
+### 2️⃣ Configure o Banco de Dados
+
+1. Crie um projeto no [Supabase](https://supabase.com/)
+2. No SQL Editor, execute os scripts na ordem:
 
 ```sql
 -- 1. Criar tabelas
@@ -100,7 +203,7 @@ Acesse seu projeto Supabase e execute os scripts na ordem:
 \i database/rls_policies.sql
 ```
 
-### 2. Backend
+### 3️⃣ Configure o Backend
 
 ```bash
 cd backend
@@ -108,131 +211,233 @@ cd backend
 # Instalar dependências
 npm install
 
-# Configurar variáveis de ambiente
+# Copiar arquivo de ambiente
 cp .env.example .env
-# Editar .env com suas credenciais
 
-# Executar em desenvolvimento
-npm run dev
+# Editar .env com suas credenciais
+# - SUPABASE_URL
+# - SUPABASE_ANON_KEY
+# - Outras configurações (veja .env.example)
 ```
 
-A API estará disponível em `http://localhost:3001`
-
-### 3. Frontend
+### 4️⃣ Configure o Frontend
 
 ```bash
-cd frontend
+cd ../frontend
 
 # Instalar dependências
 npm install
 
-# Configurar variáveis de ambiente
+# Copiar arquivo de ambiente
 cp .env.example .env
-# Editar .env com as URLs
 
-# Executar em desenvolvimento
+# Editar .env
+# - NEXT_PUBLIC_API_URL=http://localhost:3001/api
+# - NEXT_PUBLIC_SUPABASE_URL
+# - NEXT_PUBLIC_SUPABASE_ANON_KEY
+```
+
+### 5️⃣ Execute o Projeto
+
+**Terminal 1 - Backend:**
+```bash
+cd backend
 npm run dev
+# 🚀 Servidor rodando em http://localhost:3001
 ```
 
-O frontend estará disponível em `http://localhost:3000`
-
-## 👥 Perfis de Usuário
-
-O sistema suporta 5 perfis com permissões específicas:
-
-1. **Admin** - Acesso total ao sistema
-2. **Gestor** - Gerencia operações, cadastros e relatórios
-3. **Separador** - Opera separação de pedidos
-4. **Conferente** - Confere pedidos antes da expedição
-5. **Motorista** - Registra entregas e visualiza rotas
-
-## 📊 Principais Indicadores (Dashboard)
-
-- Pedidos pendentes de expedição
-- Pedidos com atraso (pendentes > 3 dias)
-- Expedições realizadas hoje
-- Pedidos em rota
-- Entregas concluídas hoje
-- Entregas atrasadas
-- Tempo médio de expedição (horas)
-- Tempo médio de entrega (horas)
-
-## 🔄 Fluxo de Processo
-
-```
-1. Pedido Faturado (ERP) 
-   ↓
-2. Separação (App Mobile/Web)
-   ↓
-3. Conferência (App Mobile/Web)
-   ↓
-4. Montagem de Rotas (Web)
-   ↓
-5. Expedição/Despacho (Web)
-   ↓
-6. Entrega com POD (App Mobile)
-   ↓
-7. Comprovante Digital (Web/App)
+**Terminal 2 - Frontend:**
+```bash
+cd frontend
+npm run dev
+# 🎨 Aplicação rodando em http://localhost:3000
 ```
 
-## 📱 Apps Móveis (Planejado)
+### 6️⃣ Acesse o Sistema
 
-### App Separadores/Conferentes
-- Login e autenticação
-- Lista de pedidos para separar
-- Leitor de código de barras
-- Confirmação de itens
-- Interface de conferência
+Abra seu navegador em: **http://localhost:3000**
 
-### App Motoristas
-- Rotas do dia
-- Lista de entregas
-- Navegação/mapa
-- Captura de assinatura digital
-- Foto do comprovante
-- Registro de ocorrências
-
-## 🔗 Integrações
-
-- **SAP Business One** - Importação automática de pedidos faturados
-- **WMS Expert** - Sincronização de status de separação
-- **Google Drive** - Armazenamento de comprovantes (assinaturas e fotos)
-
-## 📝 Próximos Passos
-
-1. **Frontend Web** (Em andamento)
-   - [ ] Dashboard completo
-   - [ ] Gestão de pedidos
-   - [ ] Roteirização com mapa
-   - [ ] Relatórios
-   - [ ] Impressão de etiquetas e romaneios
-
-2. **Apps Móveis**
-   - [ ] App separadores React Native
-   - [ ] App motoristas React Native
-
-3. **Funcionalidades Avançadas**
-   - [ ] Otimização automática de rotas (algoritmo TSP)
-   - [ ] Notificações push
-   - [ ] Tracking GPS em tempo real
-   - [ ] Dashboard para TV/monitor
-
-## 📄 Licença
-
-Projeto proprietário - Todos os direitos reservados
-
-## 👨‍💻 Desenvolvimento
-
-Sistema desenvolvido em acordo com as melhores práticas de desenvolvimento moderno:
-- TypeScript para type-safety
-- Padrão REST para APIs
-- Arquitetura em camadas (MVC)
-- Segurança com RLS e JWT
-- Logs centralizados
-- Tratamento de erros robusto
-- Código todo em português (incluindo BD e comentários)
+**Credenciais padrão** (crie no Supabase Auth):
+- Email: seu.email@exemplo.com
+- Senha: definida por você
 
 ---
 
-**Status:** 🚧 Em desenvolvimento ativo
-**Versão:** 1.0.0-alpha
+## 🎯 Uso
+
+### Fluxo Completo de Operação
+
+```mermaid
+graph LR
+    A[Pedido Faturado] --> B[Separação]
+    B --> C[Conferência]
+    C --> D[Montagem de Rotas]
+    D --> E[Expedição]
+    E --> F[Entrega]
+    F --> G[Comprovante Digital]
+```
+
+### 1. **Dashboard**
+- Visualize KPIs em tempo real
+- Acompanhe expedições do dia
+- Identifique pedidos atrasados
+
+### 2. **Separação**
+- Acesse `/separacao`
+- Selecione um pedido disponível
+- Use leitor de código de barras ou confirme manualmente
+- Finalize quando todos itens confirmados
+
+### 3. **Roteirização** *(em desenvolvimento)*
+- Monte rotas por região/transportadora
+- Adicione pedidos à rota
+- Otimize o trajeto automaticamente
+- Despache para entrega
+
+### 4. **Entregas** *(em desenvolvimento)*
+- Motorista acessa app mobile
+- Visualiza rotas do dia
+- Registra comprovante com assinatura + foto
+- Sistema atualiza status automaticamente
+
+---
+
+## 📡 API Endpoints
+
+### Autenticação
+Todos os endpoints requerem autenticação via JWT (Supabase Auth).
+
+### Principais Rotas
+
+#### **Pedidos**
+```
+GET    /api/pedidos              # Listar pedidos (com paginação)
+GET    /api/pedidos/:id          # Detalhes do pedido
+GET    /api/pedidos/:id/timeline # Timeline do pedido
+PUT    /api/pedidos/:id/status   # Atualizar status
+```
+
+#### **Separação**
+```
+GET    /api/separacao/disponiveis              # Pedidos disponíveis
+POST   /api/separacao/iniciar                  # Iniciar separação
+POST   /api/separacao/:id/item                 # Confirmar item
+POST   /api/separacao/:id/finalizar            # Finalizar separação
+```
+
+#### **Dashboard**
+```
+GET    /api/dashboard/estatisticas  # KPIs principais
+GET    /api/dashboard/alertas       # Alertas e pendências
+GET    /api/dashboard/grafico       # Dados para gráficos
+```
+
+#### **Rotas**
+```
+GET    /api/rotas                # Listar rotas
+POST   /api/rotas                # Criar rota
+PUT    /api/rotas/:id            # Atualizar rota
+POST   /api/rotas/:id/otimizar   # Otimizar trajeto
+```
+
+Para documentação completa da API, veja: [backend/README.md](backend/README.md)
+
+---
+
+## 👥 Perfis de Usuário
+
+O sistema suporta 5 perfis com permissões específicas (RLS):
+
+| Perfil | Descrição | Permissões |
+|--------|-----------|------------|
+| **Admin** | Administrador total | Acesso completo |
+| **Gestor** | Supervisor de operações | Gerencia pedidos, rotas, relatórios |
+| **Separador** | Operador de separação | Separação de pedidos apenas |
+| **Conferente** | Conferência de pedidos | Conferência e expedição |
+| **Motorista** | Entregador | Visualiza rotas, registra entregas |
+
+---
+
+## 🗺️ Roadmap
+
+### ✅ Fase 1 - MVP (Concluído)
+- [x] Estrutura do banco de dados
+- [x] Backend API REST completo
+- [x] Frontend: Dashboard e Pedidos
+- [x] Módulo de Separação
+
+### 🚧 Fase 2 - Em Desenvolvimento
+- [ ] Módulo de Roteirização com mapa
+- [ ] Módulo de Relatórios
+- [ ] Cadastros (CRUD completo)
+
+### 📅 Fase 3 - Planejado
+- [ ] App Mobile Separadores (React Native)
+- [ ] App Mobile Motoristas (React Native)
+- [ ] Impressão de etiquetas e romaneios
+- [ ] Notificações push
+
+### 🔮 Fase 4 - Futuro
+- [ ] Integração SAP Business One
+- [ ] Integração WMS Expert
+- [ ] Tracking GPS em tempo real
+- [ ] Otimização automática de rotas (IA)
+- [ ] Dashboard para TV/monitor
+
+---
+
+## 🤝 Contribuindo
+
+Contribuições são bem-vindas! Sinta-se à vontade para:
+
+1. Fazer um fork do projeto
+2. Criar uma branch para sua feature (`git checkout -b feature/nova-funcionalidade`)
+3. Commit suas mudanças (`git commit -m 'feat: adiciona nova funcionalidade'`)
+4. Push para a branch (`git push origin feature/nova-funcionalidade`)
+5. Abrir um Pull Request
+
+### Padrão de Commits
+
+Use [Conventional Commits](https://www.conventionalcommits.org/):
+
+- `feat:` - Nova funcionalidade
+- `fix:` - Correção de bug
+- `docs:` - Documentação
+- `style:` - Formatação
+- `refactor:` - Refatoração
+- `test:` - Testes
+- `chore:` - Manutenção
+
+---
+
+## 📄 Licença
+
+Este projeto é proprietário e privado.
+
+---
+
+## 👨‍💻 Autor
+
+**Octávio Memória**
+
+- GitHub: [@octaviomemoria](https://github.com/octaviomemoria)
+- Email: 121621957+octaviomemoria@users.noreply.github.com
+
+---
+
+## 🙏 Agradecimentos
+
+- [Supabase](https://supabase.com/) - Backend as a Service incrível
+- [Vercel](https://vercel.com/) - Deploy do frontend
+- [Next.js](https://nextjs.org/) - Framework React moderno
+- Comunidade open-source
+
+---
+
+<div align="center">
+
+**[⬆ Voltar ao topo](#-sistema-logística-inteligente)**
+
+Feito com ❤️ e ☕
+
+</div>

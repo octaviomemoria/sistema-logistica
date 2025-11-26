@@ -1,0 +1,25 @@
+{
+  "name": "db",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "prisma": {
+    "seed": "node --loader ts-node/esm prisma/seed.ts"
+  },
+  "scripts": {
+    "generate": "prisma generate",
+    "migrate": "prisma migrate dev",
+    "push": "prisma db push",
+    "seed": "ts-node --esm prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "^5.20.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.10",
+    "prisma": "^5.20.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.4.5"
+  }
+}

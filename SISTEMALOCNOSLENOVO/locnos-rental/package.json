@@ -1,0 +1,21 @@
+{
+  "name": "locnos-rental",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@9.0.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "pnpm -r --filter ./apps/* run build",
+    "dev": "pnpm -r --filter ./apps/* run dev",
+    "lint": "pnpm -r run lint",
+    "format": "pnpm -r run format",
+    "test": "pnpm -r run test",
+    "prisma:generate": "pnpm --filter db run generate",
+    "db:push": "pnpm --filter db run push",
+    "db:migrate": "pnpm --filter db run migrate",
+    "db:seed": "pnpm --filter db run seed"
+  }
+}

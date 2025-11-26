@@ -1,0 +1,434 @@
+# Projeto FastAPI + PostgreSQL + SQLModel + Alembic + Jinja2+HTMX + Tailwind
+Breve: estrutura mínima pronta para rodar localmente (VS Code). Inclui Docker Compose opcional, testes (pytest), lint/type (ruff, mypy) e migrações Alembic.
+
+Estrutura (criar em /c:/Users/octav/.../Pasta inicial):
+- app/
+    - __init__.py
+    - main.py
+    - core/
+        - config.py
+    - db/
+        - session.py
+        - base.py
+    - models.py
+    - routers/
+        - api.py
+        - panel.py
+    - templates/
+        - layout.html
+        - panel.html
+    - static/ (vazio, opcional)
+- alembic/
+    - env.py
+    - script.py.mako
+    - README
+    - versions/ (inicialmente vazia)
+- alembic.ini
+- requirements.txt
+- dev-requirements.txt
+- pyproject.toml
+- Dockerfile
+- docker-compose.yml
+- tests/
+    - test_api.py
+- README.md
+
+Abaixo: arquivos essenciais (copiar/criar).
+
+--- app/__init__.py ---
+```python
+# empty to mark package
+```
+
+--- app/core/config.py ---
+```python
+from pydantic import BaseSettings
+
+class Settings(BaseSettings):
+        PROJECT_NAME: str = "FastAPI Panel"
+        DATABASE_URL: str = "postgresql://postgres:postgres@db:5432/postgres"
+        # For local/debug, you can override to sqlite: sqlite:///./dev.db
+        class Config:
+                env_file = ".env"
+
+settings = Settings()
+```
+
+--- app/db/session.py ---
+```python
+from sqlmodel import create_engine, Session
+from app.core.config import settings
+
+# echo True for debugging
+engine = create_engine(settings.DATABASE_URL, echo=False)
+
+def get_session():
+        with Session(engine) as session:
+                yield session
+```
+
+--- app/db/base.py ---
+```python
+from sqlmodel import SQLModel
+# import models here to register them with metadata
+from app import models  # noqa: F401
+
+def create_db_and_tables(engine):
+        SQLModel.metadata.create_all(engine)
+```
+
+--- app/models.py ---
+```python
+from typing import Optional
+from sqlmodel import SQLModel, Field, SQLModel
+
+class Item(SQLModel, table=True):
+        id: Optional[int] = Field(default=None, primary_key=True)
+        title: str
+        content: Optional[str] = None
+```
+
+--- app/routers/api.py ---
+```python
+from fastapi import APIRouter, Depends, HTTPException
+from sqlmodel import select
+from sqlmodel import Session
+from typing import List
+
+from app.models import Item
+from app.db.session import get_session
+
+router = APIRouter(prefix="/api", tags=["api"])
+
+@router.get("/items", response_model=List[Item])
+def read_items(session: Session = Depends(get_session)):
+        items = session.exec(select(Item)).all()
+        return items
+
+@router.post("/items", response_model=Item)
+def create_item(item: Item, session: Session = Depends(get_session)):
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        return item
+
+@router.get("/items/{item_id}", response_model=Item)
+def get_item(item_id: int, session: Session = Depends(get_session)):
+        item = session.get(Item, item_id)
+        if not item:
+                raise HTTPException(status_code=404, detail="Item not found")
+        return item
+```
+
+--- app/routers/panel.py ---
+```python
+from fastapi import APIRouter, Request, Depends, Form
+from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
+from sqlmodel import select
+from app.db.session import get_session
+from app.models import Item
+from sqlmodel import Session
+
+templates = Jinja2Templates(directory="app/templates")
+router = APIRouter()
+
+@router.get("/", response_class=HTMLResponse)
+def panel(request: Request, session: Session = Depends(get_session)):
+        items = session.exec(select(Item)).all()
+        return templates.TemplateResponse("panel.html", {"request": request, "items": items})
+
+@router.post("/items", response_class=HTMLResponse)
+def create_item_panel(request: Request, title: str = Form(...), content: str = Form(None), session: Session = Depends(get_session)):
+        item = Item(title=title, content=content)
+        session.add(item)
+        session.commit()
+        session.refresh(item)
+        # If request is HTMX, return a fragment or redirect
+        if request.headers.get("HX-Request"):
+                return templates.TemplateResponse("layout.html", {"request": request, "items": [item]})
+        return RedirectResponse("/", status_code=303)
+```
+
+--- app/templates/layout.html ---
+```html
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>{{ request.app.title if request.app else "Panel" }}</title>
+    <!-- Tailwind via CDN (dev convenience). Replace with proper build for production. -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.2"></script>
+</head>
+<body class="bg-gray-100 text-gray-900">
+    <div class="container mx-auto p-4">
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>
+```
+
+--- app/templates/panel.html ---
+```html
+{% extends "layout.html" %}
+{% block content %}
+<h1 class="text-2xl font-bold mb-4">Items</h1>
+
+<form hx-post="/items" hx-swap="outerHTML" class="mb-4">
+    <div class="flex gap-2">
+        <input name="title" placeholder="Title" required class="border p-2 rounded flex-1"/>
+        <input name="content" placeholder="Content" class="border p-2 rounded flex-1"/>
+        <button class="bg-blue-600 text-white px-4 py-2 rounded">Add</button>
+    </div>
+</form>
+
+<ul id="items" class="space-y-2">
+    {% for item in items %}
+    <li class="bg-white p-3 rounded shadow">
+        <div class="font-semibold">{{ item.title }}</div>
+        <div class="text-sm text-gray-600">{{ item.content or '' }}</div>
+    </li>
+    {% else %}
+    <li class="text-gray-500">No items yet.</li>
+    {% endfor %}
+</ul>
+{% endblock %}
+```
+
+--- app/main.py ---
+```python
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from app.routers import api, panel
+from app.core.config import settings
+from app.db.session import engine
+from app.db.base import create_db_and_tables
+
+app = FastAPI(title=settings.PROJECT_NAME)
+app.include_router(api.router)
+app.include_router(panel.router)
+
+# serve static if needed
+app.mount("/static", StaticFiles(directory="app/static"), name="static")
+
+# create tables on startup when not using alembic (optional)
+@app.on_event("startup")
+def on_startup():
+        create_db_and_tables(engine)
+```
+
+--- requirements.txt ---
+```
+fastapi>=0.95
+uvicorn[standard]>=0.21
+sqlmodel>=0.0.8
+psycopg2-binary>=2.9
+jinja2>=3.1
+htmx>=0.0.8  # not necessary, htmx used from CDN; kept for completeness
+alembic>=1.11
+python-dotenv>=1.0
+```
+
+--- dev-requirements.txt ---
+```
+pytest
+httpx
+ruff
+mypy
+pytest-asyncio
+```
+
+--- pyproject.toml ---
+```toml
+[tool.ruff]
+line-length = 88
+target-version = ["py310"]
+
+[tool.mypy]
+python_version = 3.10
+check_untyped_defs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+```
+
+--- alembic.ini (minimal, set sqlalchemy.url via env or override) ---
+```
+[alembic]
+script_location = alembic
+
+[loggers]
+keys = root,sqlalchemy,alembic
+
+[handlers]
+keys = console
+
+[formatters]
+keys = generic
+
+[logger_root]
+level = WARN
+handlers = console
+```
+
+--- alembic/env.py ---
+```python
+import os
+from logging.config import fileConfig
+from sqlalchemy import engine_from_config
+from sqlalchemy import pool
+from alembic import context
+
+# this line imports SQLModel metadata by importing app.db.base (which loads models)
+from app.db.base import SQLModel  # not directly used; ensures metadata is loaded
+from app import models  # noqa: F401
+from sqlmodel import SQLModel
+from app.core.config import settings
+
+config = context.config
+fileConfig(config.config_file_name or "alembic.ini")
+
+# set URL from env or settings
+config.set_main_option("sqlalchemy.url", os.getenv("DATABASE_URL", settings.DATABASE_URL))
+target_metadata = SQLModel.metadata
+
+def run_migrations_offline():
+        url = config.get_main_option("sqlalchemy.url")
+        context.configure(url=url, target_metadata=target_metadata, literal_binds=True)
+        with context.begin_transaction():
+                context.run_migrations()
+
+def run_migrations_online():
+        connectable = engine_from_config(
+                config.get_section(config.config_ini_section),
+                prefix="sqlalchemy.",
+                poolclass=pool.NullPool,
+        )
+        with connectable.connect() as connection:
+                context.configure(connection=connection, target_metadata=target_metadata)
+                with context.begin_transaction():
+                        context.run_migrations()
+
+if context.is_offline_mode():
+        run_migrations_offline()
+else:
+        run_migrations_online()
+```
+
+Note: Alembic script template file `alembic/script.py.mako` can be taken from Alembic defaults; leave as generated by `alembic init alembic` if you run locally.
+
+--- Dockerfile ---
+```dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY . .
+
+ENV PYTHONUNBUFFERED=1
+ENV DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+--- docker-compose.yml ---
+```yaml
+version: "3.8"
+services:
+    db:
+        image: postgres:15
+        environment:
+            POSTGRES_USER: postgres
+            POSTGRES_PASSWORD: postgres
+            POSTGRES_DB: postgres
+        volumes:
+            - db_data:/var/lib/postgresql/data
+        ports:
+            - "5432:5432"
+    web:
+        build: .
+        command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+        environment:
+            - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+        ports:
+            - "8000:8000"
+        depends_on:
+            - db
+        volumes:
+            - .:/app
+volumes:
+    db_data:
+```
+
+--- tests/test_api.py ---
+```python
+from fastapi.testclient import TestClient
+from app.main import app
+
+client = TestClient(app)
+
+def test_read_root_panel():
+        r = client.get("/")
+        assert r.status_code == 200
+        assert "Items" in r.text
+
+def test_create_and_get_item():
+        payload = {"title": "x", "content": "y"}
+        post = client.post("/api/items", json=payload)
+        assert post.status_code == 200
+        data = post.json()
+        assert data["title"] == "x"
+        get = client.get(f"/api/items/{data['id']}")
+        assert get.status_code == 200
+        assert get.json()["content"] == "y"
+```
+
+--- README.md (run instructions) ---
+```markdown
+# FastAPI Panel (local)
+
+Prereqs: Python 3.10+, or Docker & Docker Compose.
+
+Local (no Docker)
+1. python -m venv .venv
+2. .venv\Scripts\activate (Windows) or source .venv/bin/activate
+3. pip install -r requirements.txt
+4. export DATABASE_URL="sqlite:///./dev.db"  # or PostgreSQL URL
+5. uvicorn app.main:app --reload
+6. Open http://127.0.0.1:8000/ (panel) and http://127.0.0.1:8000/docs (OpenAPI)
+
+With Docker Compose
+1. docker-compose up --build
+2. Open http://127.0.0.1:8000/
+
+Alembic migrations
+1. Install alembic (in env or container): pip install alembic
+2. Initialize (if not present): alembic init alembic
+3. Edit alembic/env.py as shown above to use SQLModel metadata.
+4. Create migration: alembic revision --autogenerate -m "initial"
+5. Apply: alembic upgrade head
+```
+
+Test / lint / type:
+- pytest
+- ruff check .
+- mypy app
+
+Observations / notes:
+- Tailwind used via CDN for quick setup; replace with npm build for production.
+- Alembic env references SQLModel metadata; run alembic commands with DATABASE_URL env set (or update alembic.ini).
+- For quick local dev, set DATABASE_URL to sqlite:///./dev.db to avoid running Postgres.
+- Keep code small and modular: add more routers/models as needed.
+
+Manual quick test:
+- python -m uvicorn app.main:app --reload
+- Visit http://127.0.0.1:8000/
+- API docs: http://127.0.0.1:8000/docs
+
+Ficheiros editados/added:
+- See full file list above.
+
+Se quiser, gero um script de bootstrap (venv, install, env) ou executo um `alembic init`-compat template. 

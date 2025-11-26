@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Cadastro de Usuário</title>
+    <style>
+        :root{--bg:#f5f7fb;--card:#fff;--accent:#2563eb;--danger:#ef4444;--muted:#6b7280}
+        body{font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;margin:0;background:var(--bg);display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+        .card{background:var(--card);border-radius:10px;box-shadow:0 6px 18px rgba(14,20,40,.06);width:100%;max-width:900px;display:flex;overflow:hidden}
+        .left{padding:28px;flex:1 1 420px}
+        .right{background:linear-gradient(180deg,#f8fafc 0,#eef2ff 100%);padding:28px;border-left:1px solid rgba(15,23,42,.03);width:360px}
+        h1{margin:0 0 10px;font-size:20px}
+        p.lead{color:var(--muted);margin:0 0 18px}
+        form{display:grid;gap:12px}
+        label{font-size:13px;color:#111827}
+        input,button,select{width:100%;padding:10px 12px;border:1px solid #e6e9ee;border-radius:8px;font-size:14px}
+        input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 4px rgba(37,99,235,.06)}
+        .row{display:flex;gap:12px}
+        .row > *{flex:1}
+        .small{font-size:12px;color:var(--muted)}
+        .actions{display:flex;gap:8px;align-items:center;margin-top:6px}
+        button.primary{background:var(--accent);color:#fff;border:none;padding:10px 14px;border-radius:8px;cursor:pointer}
+        button.ghost{background:transparent;border:1px solid #e6e9ee}
+        .error{color:var(--danger);font-size:13px}
+        .user-list{font-size:14px}
+        table{width:100%;border-collapse:collapse}
+        th,td{padding:8px;border-bottom:1px solid #f1f5f9;text-align:left}
+        .muted{color:var(--muted);font-size:13px}
+        .toggle-pass{position:relative}
+        .toggle-pass button{position:absolute;right:8px;top:8px;padding:6px;border-radius:6px;border:none;background:transparent;cursor:pointer;color:var(--muted)}
+        @media (max-width:720px){.card{flex-direction:column}.right{width:100%;border-left:none;border-top:1px solid rgba(15,23,42,.03)}}
+    </style>
+</head>
+<body>
+    <div class="card" role="main">
+        <div class="left">
+            <h1>Cadastro de Usuário</h1>
+            <p class="lead">Preencha os dados abaixo para criar sua conta. Os dados são armazenados localmente no navegador (localStorage).</p>
+
+            <form id="registerForm" novalidate>
+                <div>
+                    <label for="nome">Nome completo</label>
+                    <input id="nome" name="nome" type="text" required autocomplete="name" />
+                    <div id="err-nome" class="error" aria-live="polite"></div>
+                </div>
+
+                <div>
+                    <label for="email">E-mail</label>
+                    <input id="email" name="email" type="email" required autocomplete="email" />
+                    <div id="err-email" class="error" aria-live="polite"></div>
+                </div>
+
+                <div class="row">
+                    <div>
+                        <label for="senha">Senha</label>
+                        <div class="toggle-pass">
+                            <input id="senha" name="senha" type="password" minlength="6" required autocomplete="new-password" />
+                            <button type="button" id="toggleSenha" aria-label="Mostrar senha">Mostrar</button>
+                        </div>
+                        <div id="err-senha" class="error" aria-live="polite"></div>
+                    </div>
+
+                    <div>
+                        <label for="confSenha">Confirmar senha</label>
+                        <input id="confSenha" name="confSenha" type="password" required autocomplete="new-password" />
+                        <div id="err-confSenha" class="error" aria-live="polite"></div>
+                    </div>
+                </div>
+
+                <div>
+                    <label for="telefone">Telefone (opcional)</label>
+                    <input id="telefone" name="telefone" type="tel" placeholder="(11) 91234-5678" />
+                </div>
+
+                <div class="actions">
+                    <button class="primary" type="submit">Criar conta</button>
+                    <button class="ghost" type="button" id="limpar">Limpar</button>
+                    <div class="small muted" id="msg" aria-live="polite"></div>
+                </div>
+            </form>
+        </div>
+
+        <div class="right">
+            <h2 style="margin-top:0">Usuários cadastrados</h2>
+            <p class="small muted">As contas abaixo são salvas no seu navegador (apenas para demonstração).</p>
+            <div id="lista" class="user-list" role="region" aria-live="polite"></div>
+        </div>
+    </div>
+
+    <script>
+        // Utilitários simples
+        const $ = id => document.getElementById(id);
+        const showErr = (id, msg) => $(id).textContent = msg || '';
+        const form = $('registerForm');
+        const STORAGE_KEY = 'app_users_demo_v1';
+
+        // Toggle senha
+        $('toggleSenha').addEventListener('click', () => {
+            const p = $('senha');
+            const btn = $('toggleSenha');
+            if (p.type === 'password') { p.type = 'text'; btn.textContent = 'Ocultar'; }
+            else { p.type = 'password'; btn.textContent = 'Mostrar'; }
+        });
+
+        // Load users
+        function loadUsers() {
+            try {
+                return JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]');
+            } catch {
+                return [];
+            }
+        }
+
+        function saveUsers(users) {
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(users));
+        }
+
+        function renderUsers() {
+            const users = loadUsers();
+            const el = $('lista');
+            if (!users.length) {
+                el.innerHTML = '<div class="muted">Nenhum usuário cadastrado.</div>';
+                return;
+            }
+            let html = '<table><thead><tr><th>Nome</th><th>E-mail</th><th>Telefone</th></tr></thead><tbody>';
+            for (const u of users) {
+                html += `<tr><td>${escapeHtml(u.nome)}</td><td>${escapeHtml(u.email)}</td><td>${escapeHtml(u.telefone||'—')}</td></tr>`;
+            }
+            html += '</tbody></table><div style="margin-top:8px"><button id="limparTodos" class="ghost" type="button">Remover todos</button></div>';
+            el.innerHTML = html;
+            const delAll = $('limparTodos');
+            if (delAll) delAll.addEventListener('click', () => {
+                if (confirm('Remover todos os usuários cadastrados? Esta ação não pode ser desfeita.')) {
+                    saveUsers([]); renderUsers(); $('msg').textContent = 'Todos os usuários foram removidos.';
+                }
+            });
+        }
+
+        // Escape para evitar injeção ao renderizar
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[s]);
+        }
+
+        // Validação básica no submit
+        form.addEventListener('submit', (ev) => {
+            ev.preventDefault();
+            // limpar erros
+            ['err-nome','err-email','err-senha','err-confSenha','msg'].forEach(id => showErr(id, ''));
+            const nome = $('nome').value.trim();
+            const email = $('email').value.trim().toLowerCase();
+            const senha = $('senha').value;
+            const conf = $('confSenha').value;
+            const telefone = $('telefone').value.trim();
+
+            let ok = true;
+            if (nome.length < 2) { showErr('err-nome','Informe o nome completo (mínimo 2 caracteres)'); ok = false; }
+            if (!/^\S+@\S+\.\S+$/.test(email)) { showErr('err-email','E-mail inválido'); ok = false; }
+            if (senha.length < 6) { showErr('err-senha','A senha deve ter ao menos 6 caracteres'); ok = false; }
+            if (senha !== conf) { showErr('err-confSenha','As senhas não coincidem'); ok = false; }
+
+            if (!ok) return;
+
+            const users = loadUsers();
+            if (users.some(u => u.email === email)) {
+                showErr('err-email','Este e-mail já está cadastrado');
+                return;
+            }
+
+            // Adicionar usuário (não armazene senhas em plain text em produção)
+            users.push({ nome, email, senha, telefone, createdAt: new Date().toISOString() });
+            saveUsers(users);
+            renderUsers();
+            form.reset();
+            $('msg').textContent = 'Conta criada com sucesso.';
+        });
+
+        // Botão limpar formulario
+        $('limpar').addEventListener('click', () => {
+            form.reset();
+            ['err-nome','err-email','err-senha','err-confSenha','msg'].forEach(id => showErr(id, ''));
+        });
+
+        // Inicializa lista
+        renderUsers();
+    </script>
+</body>
+</html></div>

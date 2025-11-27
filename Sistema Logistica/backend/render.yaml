@@ -1,0 +1,27 @@
+# Render deployment configuration
+# Docs: https://render.com/docs/yaml-spec
+
+services:
+  - type: web
+    name: sistema-logistica-backend
+    env: node
+    region: ohio
+    plan: free
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3001
+      - key: SUPABASE_URL
+        sync: false # Define manualmente na UI do Render
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: LOG_LEVEL
+        value: info

@@ -1,0 +1,68 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String?
+  password  String
+  role      String   @default("USER") // ADMIN, DRIVER, MANAGER
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Order {
+  id          String   @id @default(cuid())
+  customer    String
+  address     String
+  city        String
+  weight      Float
+  status      String   @default("PENDING") // PENDING, ASSIGNED, DELIVERED, CANCELLED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  routeStop   RouteStop?
+}
+
+model Vehicle {
+  id          String   @id @default(cuid())
+  plate       String   @unique
+  model       String
+  capacity    Float
+  driverName  String?
+  status      String   @default("AVAILABLE") // AVAILABLE, IN_TRANSIT, MAINTENANCE
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  routes      Route[]
+}
+
+model Route {
+  id          String   @id @default(cuid())
+  date        DateTime
+  status      String   @default("DRAFT") // DRAFT, CONFIRMED, IN_PROGRESS, COMPLETED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vehicleId   String
+  vehicle     Vehicle  @relation(fields: [vehicleId], references: [id])
+  
+  stops       RouteStop[]
+}
+
+model RouteStop {
+  id          String   @id @default(cuid())
+  sequence    Int
+  
+  routeId     String
+  route       Route    @relation(fields: [routeId], references: [id])
+  
+  orderId     String   @unique
+  order       Order    @relation(fields: [orderId], references: [id])
+}

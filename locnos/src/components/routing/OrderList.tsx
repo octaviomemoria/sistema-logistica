@@ -20,10 +20,10 @@ interface OrderListProps {
 export default function OrderList({ orders, onSelectOrder, selectedOrderIds }: OrderListProps) {
     return (
         <div className="bg-white p-4 rounded shadow">
-            <h2 className="text-xl font-bold mb-4">Available Orders</h2>
+            <h2 className="text-xl font-bold mb-4">Pedidos Disponíveis</h2>
             <div className="space-y-2">
                 {orders.length === 0 ? (
-                    <p className="text-gray-500">No pending orders.</p>
+                    <p className="text-gray-500">Nenhum pedido pendente.</p>
                 ) : (
                     orders.map((order) => (
                         <div

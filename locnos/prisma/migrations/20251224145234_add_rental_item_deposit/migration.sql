@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "RentalItem" ADD COLUMN     "depositValue" DOUBLE PRECISION NOT NULL DEFAULT 0;

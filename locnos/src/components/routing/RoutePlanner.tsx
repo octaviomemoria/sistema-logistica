@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { createRoute } from '@/app/dashboard/routing/actions'
 import OrderList from './OrderList'
+import { useToast } from '@/hooks/use-toast'
 
 type Vehicle = {
     id: string
@@ -31,6 +32,7 @@ export default function RoutePlanner({ initialOrders, vehicles }: RoutePlannerPr
     const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([])
     const [selectedVehicleId, setSelectedVehicleId] = useState<string>('')
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const { showToast } = useToast()
 
     const handleSelectOrder = (orderId: string) => {
         setSelectedOrderIds(prev =>
@@ -52,17 +54,17 @@ export default function RoutePlanner({ initialOrders, vehicles }: RoutePlannerPr
             })
 
             if (result.success) {
-                alert('Route created successfully!')
+                showToast('success', 'Rota criada com sucesso!')
                 // Optimistically update UI or wait for revalidation
                 setOrders(prev => prev.filter(o => !selectedOrderIds.includes(o.id)))
                 setSelectedOrderIds([])
                 setSelectedVehicleId('')
             } else {
-                alert('Failed to create route')
+                showToast('error', result.error || 'Falha ao criar rota')
             }
         } catch (error) {
             console.error(error)
-            alert('An error occurred')
+            showToast('error', 'Ocorreu um erro')
         } finally {
             setIsSubmitting(false)
         }
@@ -83,16 +85,16 @@ export default function RoutePlanner({ initialOrders, vehicles }: RoutePlannerPr
             />
 
             <div className="bg-white p-4 rounded shadow">
-                <h2 className="text-xl font-bold mb-4">Route Details</h2>
+                <h2 className="text-xl font-bold mb-4">Detalhes da Rota</h2>
 
                 <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Select Vehicle</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Selecionar Veículo</label>
                     <select
                         className="w-full border rounded p-2"
                         value={selectedVehicleId}
                         onChange={(e) => setSelectedVehicleId(e.target.value)}
                     >
-                        <option value="">-- Select Vehicle --</option>
+                        <option value="">-- Selecione um Veículo --</option>
                         {vehicles.map(vehicle => (
                             <option key={vehicle.id} value={vehicle.id}>
                                 {vehicle.plate} - {vehicle.model} ({vehicle.capacity} kg)
@@ -102,25 +104,25 @@ export default function RoutePlanner({ initialOrders, vehicles }: RoutePlannerPr
                 </div>
 
                 <div className="mb-6 p-4 bg-gray-50 rounded">
-                    <h3 className="font-semibold mb-2">Summary</h3>
-                    <p>Selected Orders: {selectedOrderIds.length}</p>
-                    <p>Total Weight: {selectedOrdersWeight} kg</p>
+                    <h3 className="font-semibold mb-2">Resumo</h3>
+                    <p>Pedidos Selecionados: {selectedOrderIds.length}</p>
+                    <p>Peso Total: {selectedOrdersWeight} kg</p>
                     {selectedVehicle && (
                         <p className={`text-sm ${selectedOrdersWeight > selectedVehicle.capacity ? 'text-red-500 font-bold' : 'text-green-600'}`}>
-                            Capacity: {selectedVehicle.capacity} kg
+                            Capacidade: {selectedVehicle.capacity} kg
                         </p>
                     )}
                 </div>
 
                 <button
                     className={`w-full py-2 px-4 rounded text-white font-bold ${!selectedVehicleId || selectedOrderIds.length === 0 || isSubmitting
-                            ? 'bg-gray-400 cursor-not-allowed'
-                            : 'bg-blue-600 hover:bg-blue-700'
+                        ? 'bg-gray-400 cursor-not-allowed'
+                        : 'bg-blue-600 hover:bg-blue-700'
                         }`}
                     onClick={handleCreateRoute}
                     disabled={!selectedVehicleId || selectedOrderIds.length === 0 || isSubmitting}
                 >
-                    {isSubmitting ? 'Creating Route...' : 'Create Route'}
+                    {isSubmitting ? 'Criando Rota...' : 'Criar Rota'}
                 </button>
             </div>
         </div>

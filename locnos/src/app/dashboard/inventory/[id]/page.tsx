@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { ArrowLeft, Edit2, History, Package, DollarSign, Calendar } from 'lucide-react'
 import { getEquipmentHistory } from './history-actions'
+import AssetManager from '@/components/inventory/AssetManager'
 
 export default function InventoryDetailsPage() {
     const params = useParams()
@@ -89,7 +90,7 @@ export default function InventoryDetailsPage() {
                 </div>
 
                 {/* History Table */}
-                <div className="lg:col-span-2">
+                <div className="lg:col-span-2 space-y-6">
                     <div className="bg-white rounded-lg shadow-sm border overflow-hidden">
                         <div className="px-6 py-4 border-b flex items-center gap-2">
                             <History size={18} className="text-gray-400" />
@@ -130,6 +131,9 @@ export default function InventoryDetailsPage() {
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Asset Manager Component */}
+                    <AssetManager equipmentId={id} />
                 </div>
             </div>
         </div>

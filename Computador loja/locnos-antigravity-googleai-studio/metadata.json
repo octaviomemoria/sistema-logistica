@@ -1,0 +1,7 @@
+{
+  "name": "Locnos - Equipment Rental Management",
+  "description": "A comprehensive system for managing equipment rentals, including inventory tracking, reservation management, client database, and financial overviews. This application provides a central dashboard for administrators to monitor key business metrics and manage operations efficiently.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}

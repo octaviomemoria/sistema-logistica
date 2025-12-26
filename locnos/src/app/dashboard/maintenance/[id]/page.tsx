@@ -12,7 +12,7 @@ export default async function MaintenanceDetailsPage({ params }: { params: Promi
 
     const maintenance = await prisma.maintenance.findUnique({
         where: { id },
-        include: { equipment: true }
+        include: { equipment: true, provider: true }
     })
 
     if (!maintenance) return <div>Manutenção não encontrada</div>
@@ -57,6 +57,20 @@ export default async function MaintenanceDetailsPage({ params }: { params: Promi
                                     {maintenance.type === 'CORRECTIVE' ? <AlertTriangle size={18} className="text-red-500" /> : <Clock size={18} className="text-blue-500" />}
                                     <span className="font-medium text-gray-700">{maintenance.type === 'CORRECTIVE' ? 'Corretiva' : 'Preventiva'}</span>
                                 </div>
+                                <div className="flex items-center gap-3">
+                                    <Wrench size={18} className="text-gray-400" />
+                                    <span className="text-gray-700">
+                                        Execução: <strong>{maintenance.executorType === 'EXTERNAL' ? 'Externa' : 'Interna'}</strong>
+                                    </span>
+                                </div>
+                                {maintenance.executorType === 'EXTERNAL' && maintenance.provider && (
+                                    <div className="flex items-center gap-3">
+                                        <Wrench size={18} className="text-orange-500" />
+                                        <span className="text-gray-700">
+                                            Fornecedor: <Link href={`/dashboard/persons/${maintenance.providerId}`} className="text-blue-600 hover:underline">{maintenance.provider.name}</Link>
+                                        </span>
+                                    </div>
+                                )}
                                 <div className="flex items-center gap-3">
                                     <Calendar size={18} className="text-gray-400" />
                                     <span className="text-gray-700">Início: {new Date(maintenance.startDate).toLocaleDateString()}</span>

@@ -6,6 +6,10 @@ import { RentalService } from '@/lib/rentals/service'
 import { RentalStatus, PaymentStatus, RentalType } from '@prisma/client'
 import { EmailService } from '@/lib/email/service'
 import { EmailTemplates } from '@/lib/email/templates'
+import { FinancialRentalService } from '@/lib/financial/financial-rental.service'
+import { getServerSession } from 'next-auth'
+import { authOptions } from '@/lib/auth'
+import { InventoryService, InventoryType } from '@/lib/inventory/service'
 
 // Types
 export interface RentalItemInput {
@@ -55,6 +59,12 @@ export async function getDrivers() {
 
 export async function createRental(data: RentalInput) {
     try {
+        const session = await getServerSession(authOptions)
+        if (!session?.user?.tenantId) {
+            return { success: false, error: 'Sessão inválida ou Tenant não identificado' }
+        }
+        const tenantId = session.user.tenantId
+
         // 1. Stock Validation
         const stockCheck = await RentalService.validateStock(
             data.items.map(i => ({ equipmentId: i.equipmentId, quantity: i.quantity })),
@@ -116,11 +126,18 @@ export async function createRental(data: RentalInput) {
             // 4. Update Stock Counters if Active
             if (statusEnum === 'ACTIVE' || statusEnum === 'LATE') {
                 for (const item of data.items) {
-                    await tx.equipment.update({
-                        where: { id: item.equipmentId },
-                        data: { rentedQty: { increment: item.quantity } }
-                    })
+                    await InventoryService.registerMovement({
+                        tenantId,
+                        equipmentId: item.equipmentId,
+                        quantity: -item.quantity, // OUT = Negative
+                        type: InventoryType.RENTAL_OUT,
+                        rentalId: newRental.id,
+                        userId: session.user.id
+                    }, tx)
                 }
+
+                // 5. Financial Integration (Transactional)
+                await FinancialRentalService.createTitleFromRental(newRental, tenantId, tx)
             }
 
             return newRental
@@ -208,6 +225,12 @@ export async function getRentalById(id: string) {
 
 export async function updateRental(id: string, data: RentalInput) {
     try {
+        const session = await getServerSession(authOptions)
+        if (!session?.user?.tenantId) {
+            return { success: false, error: 'Sessão inválida' }
+        }
+        const tenantId = session.user.tenantId
+
         const existing = await prisma.rental.findUnique({
             where: { id },
             include: { items: true }
@@ -231,10 +254,14 @@ export async function updateRental(id: string, data: RentalInput) {
             // Revert Stock if was ACTIVE
             if (existing.status === 'ACTIVE' || existing.status === 'LATE') {
                 for (const item of existing.items) {
-                    await tx.equipment.update({
-                        where: { id: item.equipmentId },
-                        data: { rentedQty: { decrement: item.quantity } }
-                    })
+                    await InventoryService.registerMovement({
+                        tenantId,
+                        equipmentId: item.equipmentId,
+                        quantity: item.quantity, // RETURN = Positive (Putting back)
+                        type: InventoryType.RENTAL_RETURN,
+                        rentalId: id,
+                        userId: session.user.id
+                    }, tx)
                 }
             }
 
@@ -288,13 +315,25 @@ export async function updateRental(id: string, data: RentalInput) {
             // Apply New Stock if Active
             if (statusEnum === 'ACTIVE' || statusEnum === 'LATE') {
                 for (const item of data.items) {
-                    await tx.equipment.update({
-                        where: { id: item.equipmentId },
-                        data: { rentedQty: { increment: item.quantity } }
-                    })
+                    await InventoryService.registerMovement({
+                        tenantId,
+                        equipmentId: item.equipmentId,
+                        quantity: -item.quantity, // OUT = Negative
+                        type: InventoryType.RENTAL_OUT,
+                        rentalId: id,
+                        userId: session.user.id
+                    }, tx)
                 }
             }
         })
+
+        // Financial Sync (Update Value/Date)
+        if (statusEnum === 'ACTIVE') {
+            const updatedRental = await prisma.rental.findUnique({ where: { id } })
+            if (updatedRental) {
+                await FinancialRentalService.syncTitleWithRental(updatedRental, tenantId)
+            }
+        }
 
         revalidatePath('/dashboard/rentals')
         return { success: true }
@@ -306,6 +345,12 @@ export async function updateRental(id: string, data: RentalInput) {
 
 export async function updateRentalStatus(id: string, newStatus: string) {
     try {
+        const session = await getServerSession(authOptions)
+        if (!session?.user?.tenantId) {
+            return { success: false, error: 'Sessão inválida' }
+        }
+        const tenantId = session.user.tenantId
+
         const rental = await prisma.rental.findUnique({
             where: { id },
             include: { person: true, items: { include: { equipment: true } } }
@@ -328,23 +373,31 @@ export async function updateRentalStatus(id: string, newStatus: string) {
                     throw new Error(`Estoque insuficiente: ${stockCheck.blockingItems.map(i => i.name).join(', ')}`)
                 }
 
-                // Decrement Stock
+                // Stock OUT
                 for (const item of rental.items) {
-                    await tx.equipment.update({
-                        where: { id: item.equipmentId },
-                        data: { rentedQty: { increment: item.quantity } }
-                    })
+                    await InventoryService.registerMovement({
+                        tenantId,
+                        equipmentId: item.equipmentId,
+                        quantity: -item.quantity, // OUT = Negative
+                        type: InventoryType.RENTAL_OUT,
+                        rentalId: id,
+                        userId: session.user.id
+                    }, tx)
                 }
             }
 
             // 2. Ending Rental (Stock IN) or Reverting Start (Stock IN)
             if (wasActive && !becomingActive) {
-                // Increment Stock (Return to Shelf)
+                // Stock Return
                 for (const item of rental.items) {
-                    await tx.equipment.update({
-                        where: { id: item.equipmentId },
-                        data: { rentedQty: { decrement: item.quantity } }
-                    })
+                    await InventoryService.registerMovement({
+                        tenantId,
+                        equipmentId: item.equipmentId,
+                        quantity: item.quantity, // RETURN = Positive
+                        type: InventoryType.RENTAL_RETURN,
+                        rentalId: id,
+                        userId: session.user.id
+                    }, tx)
                 }
             }
 
@@ -353,6 +406,12 @@ export async function updateRentalStatus(id: string, newStatus: string) {
                 where: { id },
                 data: { status: newStatus as RentalStatus }
             })
+
+            // 4. Financial Integration: Created Title if becoming ACTIVE
+            // We use 'rental' variable (fetched before) but 'tx' for creation
+            if (!wasActive && becomingActive) {
+                await FinancialRentalService.createTitleFromRental(rental, tenantId, tx)
+            }
         })
 
         if (rental.person.email) {
@@ -362,6 +421,12 @@ export async function updateRentalStatus(id: string, newStatus: string) {
                 html: EmailTemplates.statusChanged(id, rental.person.name, newStatus)
             })
         }
+
+        // Financial Integration: Created Title if becoming ACTIVE
+        const wasActive = rental.status === 'ACTIVE' || rental.status === 'LATE'
+        const becomingActive = newStatus === 'ACTIVE' || newStatus === 'LATE'
+
+
 
         revalidatePath('/dashboard/rentals')
         return { success: true }

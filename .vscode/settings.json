@@ -1,2 +1,6 @@
 {
+	// Habilita o modelo GPT-5-Codex (Preview) como padrão do chat Copilot.
+	"github.copilot.chat.model": "gpt-5-codex-preview",
+	// Usa o mesmo modelo preview para sugestões inline em todos os arquivos.
+	"github.copilot.inlineSuggest.model": "gpt-5-codex-preview"
 }

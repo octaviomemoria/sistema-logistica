@@ -381,6 +381,12 @@ export default function Clients(){
     pushFeedback(`Log registrado: ${label}`, 'info')
   }
 
+  function registerLogPrompt(id: number){
+    const note = prompt('Descreva a nota rápida para este cliente:')
+    if (!note) return
+    registerLog(id, note)
+  }
+
   return (
     <div>
       <h2>Clientes</h2>
@@ -739,9 +745,23 @@ export default function Clients(){
                       <div className="actions" style={{gridColumn:'1 / span 2', display:'flex', gap:8}}>
                         <button onClick={()=>saveInline(c.id)} disabled={inlineSaving[c.id]}>Salvar alterações rápidas</button>
                         <button onClick={()=>cancelInlineEdit(c.id)}>Cancelar</button>
+                        <button onClick={()=>registerLogPrompt(c.id)}>Registrar nota</button>
                       </div>
                     </div>
                   )}
+                </div>
+                <div className="card-detail-section">
+                  <h4>Últimas interações</h4>
+                  <ul className="log-timeline">
+                    {(logs[c.id] || []).map(entry=>(
+                      <li key={entry.id}>
+                        <span className="log-time">{entry.timestamp}</span>
+                        <span className="log-label">{entry.label}</span>
+                      </li>
+                    ))}
+                    {(logs[c.id] || []).length === 0 && <li>Nenhum registro ainda.</li>}
+                  </ul>
+                </div>
                 </div>
               </div>
             )}

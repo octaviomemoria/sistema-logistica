@@ -7,148 +7,882 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// --- BACKUP & RESTORE ---
+
+enum BackupJobType {
+  EXPORT
+  IMPORT
+  VALIDATE
+  RESET
+}
+
+enum BackupJobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+enum BackupFormat {
+  XLSX
+  CSV_ZIP
+}
+
+model BackupJob {
+  id        String   @id @default(cuid())
+  
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  
+  createdByUserId String
+  createdBy       User   @relation("BackupJobCreator", fields: [createdByUserId], references: [id])
+  
+  type      BackupJobType
+  format    BackupFormat?
+  status    BackupJobStatus @default(PENDING)
+  progress  Int             @default(0) // 0-100
+  
+  // JSON com: { tables, includeSecrets, includeLogs, resetBeforeImport, etc }
+  options   Json?
+  
+  // Arquivo gerado/processado
+  fileName  String?
+  filePath  String?
+  fileSize  Int?    // em bytes
+  
+  // Relatório de validação/importação (JSON)
+  report    Json?
+  
+  // Erro se falhou
+  error     String?
+  
+  startedAt  DateTime?
+  finishedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status])
+}
+
+// --- USER MANAGEMENT ---
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
-  name      String?
+  name      String
+  phone     String?
   password  String
-  role      String   @default("USER") // ADMIN, DRIVER, MANAGER
+  
+  // Status e Controle
+  status    UserStatus @default(ACTIVE)
+  isActive  Boolean    @default(true)
+  
+  // Segurança
+  lastLoginAt       DateTime?
+  lastLoginIp       String?
+  failedLoginCount  Int       @default(0)
+  blockedAt         DateTime?
+  blockedReason     String?
+  passwordResetToken String?
+  passwordResetExpires DateTime?
+  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   
-  deliveries Rental[] @relation("DeliveryDriver")
-  returns    Rental[] @relation("ReturnDriver")
-  routes     Route[]  @relation("DriverRoutes")
+  // Relations
+  roleId    String?
+  role      Role?    @relation(fields: [roleId], references: [id])
+  
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  
+  permissions     UserPermission[]
+  sessions        UserSession[]
+  loginAttempts   LoginAttempt[]
+  
+  deliveries     Rental[] @relation("DeliveryDriver")
+  returns        Rental[] @relation("ReturnDriver")
+  routes         Route[]  @relation("DriverRoutes")
+  tasks          Task[]   @relation("TaskResponsible")
+  createdTasks   Task[]   @relation("TaskCreator")
+  createdPersons Person[] @relation("CreatedPersons")
+  inventoryMovements InventoryMovement[]
+  auditLogs AuditLog[]
+  createdBackupJobs BackupJob[] @relation("BackupJobCreator")
+  
+  @@index([tenantId])
+  @@index([email])
+  @@index([status])
 }
-
 
 model PersonType {
   id        String   @id @default(cuid())
-  name      String   @unique
+  name      String
   color     String   @default("#3B82F6")
   system    Boolean  @default(false) // System types cannot be deleted
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  
-  persons   PersonPersonType[]
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  persons PersonPersonType[]
+
+  @@unique([name, tenantId])
 }
 
 model Person {
-  id          String   @id @default(cuid())
-  type        String   @default("PF") // PF or PJ
-  name        String
-  tradeName   String?
-  document    String   @unique // CPF or CNPJ
-  
+  id        String  @id @default(cuid())
+  type      String  @default("PF") // PF or PJ
+  name      String
+  tradeName String?
+  document  String // CPF or CNPJ
+
   // Contact
-  email       String?
-  phone       String
-  
+  email String?
+  phone String
+
   // Address
-  zipCode     String
-  street      String
-  number      String
-  complement  String?
+  zipCode      String
+  street       String
+  number       String
+  complement   String?
   neighborhood String
-  city        String
-  state       String
-  
+  city         String
+  state        String
+
   // Business Rules
-  status      String   @default("ACTIVE") // ACTIVE, INACTIVE, DEFAULTER
-  active      Boolean  @default(true)
-  
+  status String  @default("ACTIVE") // ACTIVE, INACTIVE, DEFAULTER
+  active Boolean @default(true)
+
+  createdById String?
+  createdBy   User?   @relation("CreatedPersons", fields: [createdById], references: [id])
+
   // Extra Data
-  documents   String[] // Array of base64 strings or URLs
-  references  Json?    // Stores array of objects
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  documents  String[] // Array of base64 strings or URLs
+  references Json? // Stores array of objects
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   personTypes PersonPersonType[]
   rentals     Rental[]
+  providedMaintenances Maintenance[] @relation("MaintenanceProvider")
+
+  @@unique([document, tenantId])
+  @@index([tenantId])
 }
 
 model PersonPersonType {
-  personId     String
-  person       Person     @relation(fields: [personId], references: [id], onDelete: Cascade)
-  
+  personId String
+  person   Person @relation(fields: [personId], references: [id], onDelete: Cascade)
+
   personTypeId String
   personType   PersonType @relation(fields: [personTypeId], references: [id], onDelete: Cascade)
-  
-  assignedAt   DateTime   @default(now())
-  
+
+  assignedAt DateTime @default(now())
+
   @@id([personId, personTypeId])
 }
 
-
 model Equipment {
-  id              String   @id @default(cuid())
-  name            String
-  category        String
-  subCategory     String?
-  brand           String?
-  description     String?
-  
+  id          String  @id @default(cuid())
+  name        String
+  category    String
+  subCategory String?
+  brand       String?
+  description String?
+
   // Financial
-  purchasePrice   Float    @default(0)
-  salePrice       Float?
-  replacementValue Float?  @default(0) // Value for damage/loss
+  purchasePrice    Float  @default(0)
+  salePrice        Float?
+  replacementValue Float? @default(0) // Value for damage/loss
   suggestedDeposit Float?
-  
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
   // Stock
-  totalQty        Int      @default(1)
-  rentedQty       Int      @default(0)
-  
-  // Media (Base64 or URL)
-  imageUrl        String?
-  
+  totalQty  Int @default(1)
+  rentedQty Int @default(0)
+
   // Dynamic JSON Fields
   // rentalPeriods: Array of { description: string, days: number, price: float }
-  rentalPeriods   Json?
+  rentalPeriods  Json?
   // specifications: Array of { key: string, value: string }
-  specifications  Json?
+  specifications Json?
   // externalLinks: Array of strings
-  externalLinks   String[]
-  
-  // Relations
-  rentalItems     RentalItem[]
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  externalLinks  String[]
 
-  maintenances    Maintenance[]
+  assets      Asset[]
+  movements   InventoryMovement[]
+
+  // Relations
+  rentalItems RentalItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  maintenances Maintenance[] @relation("EquipmentMaintenances")
+
+  @@index([tenantId])
+}
+
+model InventoryMovement {
+  id          String   @id @default(cuid())
+  date        DateTime @default(now())
+  
+  equipmentId String
+  equipment   Equipment @relation(fields: [equipmentId], references: [id])
+  
+  quantity    Int    // Positive (In) or Negative (Out)
+  type        String // "RENTAL_OUT", "RENTAL_RETURN", "MAINTENANCE_OUT", "MAINTENANCE_RETURN", "ADJUSTMENT", "PURCHASE"
+  
+  // References
+  rentalId    String? 
+  rental      Rental? @relation(fields: [rentalId], references: [id])
+  
+  maintenanceId String?
+  maintenance Maintenance? @relation(fields: [maintenanceId], references: [id])
+  
+  userId      String? // Who performed the action
+  user        User?   @relation(fields: [userId], references: [id])
+  
+  tenantId    String?
+  tenant      Tenant? @relation(fields: [tenantId], references: [id])
+  
+  createdAt   DateTime @default(now())
+  
+  @@index([tenantId, equipmentId])
+}
+
+enum EquipmentStatus {
+  AVAILABLE
+  RENTED
+  MAINTENANCE
+  LOST
+  RETIRED
+}
+
+// --- TASK MANAGEMENT ---
+
+enum RecurrenceType {
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  MONTHLY_SAME_DAY // Same day each month (e.g., 15th of every month)
+  CUSTOM
+}
+
+model Task {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  status      String    @default("PENDING") // PENDING, COMPLETED
+  priority    String    @default("NORMAL") // LOW, NORMAL, HIGH
+  dueDate     DateTime?
+
+  responsibleId String?
+  responsible   User?   @relation("TaskResponsible", fields: [responsibleId], references: [id])
+
+  // Security & Audit
+  createdById String?
+  createdBy   User?   @relation("TaskCreator", fields: [createdById], references: [id])
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  // Polymorphic Links
+  entityType String? // e.g. "RENTAL", "MAINTENANCE"
+  entityId   String?
+
+  // Recurring Task Configuration
+  isRecurring        Boolean          @default(false)
+  recurrenceType     RecurrenceType?
+  recurrenceInterval Int?             @default(1) // For CUSTOM type
+  recurrenceEndDate  DateTime?
+  parentTaskId       String?          // Links to parent recurring task
+  parentTask         Task?            @relation("RecurringTasks", fields: [parentTaskId], references: [id])
+  childTasks         Task[]           @relation("RecurringTasks")
+
+  // Reminder Configuration
+  reminderEnabled  Boolean   @default(false)
+  reminderDateTime DateTime?
+  reminderSent     Boolean   @default(false)
+
+  subtasks Subtask[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+}
+
+model Subtask {
+  id     String @id @default(cuid())
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  title     String
+  completed Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// --- CONTRACTS ---
+
+model ContractTemplate {
+  id      String  @id @default(cuid())
+  name    String
+  content String // The text with {{Placeholders}}
+  active  Boolean @default(true)
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+// --- MAINTENANCE ---
+
+enum MaintenanceExecutor {
+  INTERNAL
+  EXTERNAL
+}
+
+enum MaintenanceApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum MaintenanceStatus {
+  OPEN
+  WAITING_PARTS
+  WAITING_SERVICE
+  COMPLETED
+  CANCELLED
 }
 
 model Maintenance {
   id          String    @id @default(cuid())
   equipmentId String
-  equipment   Equipment @relation(fields: [equipmentId], references: [id])
-  
-  type        String    @default("CORRECTIVE") // PREVENTIVE, CORRECTIVE
+  equipment   Equipment @relation("EquipmentMaintenances", fields: [equipmentId], references: [id])
+
+  type        String  @default("CORRECTIVE") // PREVENTIVE, CORRECTIVE
   description String?
-  cost        Float     @default(0)
+  cost        Float   @default(0)
   
-  startDate   DateTime  @default(now())
-  endDate     DateTime?
+  executorType MaintenanceExecutor @default(INTERNAL)
   
-  status      String    @default("OPEN") // OPEN, COMPLETED
+  providerId   String?
+  provider     Person? @relation("MaintenanceProvider", fields: [providerId], references: [id])
   
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  approvalStatus MaintenanceApprovalStatus @default(PENDING)
+
+  startDate DateTime  @default(now())
+  endDate   DateTime?
+
+  status MaintenanceStatus @default(OPEN)
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  titles FinancialTitle[]
+  inventoryMovements InventoryMovement[]
+
+  @@index([tenantId])
 }
 
-// --- NEW MODULES ---
+// --- RBAC & USER MANAGEMENT ---
 
-model ContractTemplate {
+enum UserStatus {
+  PENDING      // Aguardando primeiro acesso
+  ACTIVE       // Ativo e funcionando
+  INACTIVE     // Inativo (desativado manualmente)
+  BLOCKED      // Bloqueado por segurança
+}
+
+enum PermissionAction {
+  VIEW
+  CREATE
+  EDIT
+  DELETE
+  APPROVE
+  EXPORT
+  MANAGE  // Permissão total no recurso
+}
+
+// Deprecated - mantido para compatibilidade
+enum UserRole {
+  ADMIN       // Full Access
+  FINANCIAL   // Read/Write Financials
+  AUDIT       // Read Only + Logs
+  OPERATOR    // Basic Operations
+}
+
+// Perfis configuráveis por empresa
+model Role {
   id          String   @id @default(cuid())
   name        String
-  content     String   // The text with {{Placeholders}}
-  active      Boolean  @default(true)
+  description String?
+  isSystem    Boolean  @default(false)
+  isActive    Boolean  @default(true)
+  
+  tenantId    String?
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id])
+  
+  users       User[]
+  permissions RolePermission[]
+  
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
+  
+  @@unique([name, tenantId])
+  @@index([tenantId])
+  @@index([isActive])
 }
 
-// Enums
+// Recursos do sistema (módulos)
+model Resource {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  displayName String
+  description String?
+  module      String
+  isActive    Boolean  @default(true)
+  
+  permissions Permission[]
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@index([module])
+}
+
+// Ações possíveis em cada recurso
+model Permission {
+  id          String   @id @default(cuid())
+  
+  resourceId  String
+  resource    Resource @relation(fields: [resourceId], references: [id], onDelete: Cascade)
+  
+  action      PermissionAction
+  displayName String
+  description String?
+  
+  rolePermissions RolePermission[]
+  userPermissions UserPermission[]
+  
+  createdAt   DateTime @default(now())
+  
+  @@unique([resourceId, action])
+  @@index([resourceId])
+}
+
+// Permissões atribuídas a um perfil
+model RolePermission {
+  roleId       String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  granted      Boolean    @default(true)
+  
+  @@id([roleId, permissionId])
+  @@index([roleId])
+}
+
+// Permissões personalizadas de um usuário (override do role)
+model UserPermission {
+  userId       String
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  
+  granted      Boolean
+  
+  @@id([userId, permissionId])
+  @@index([userId])
+}
+
+// Controle de sessões
+model UserSession {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  token     String   @unique
+  ipAddress String?
+  userAgent String?
+  
+  expiresAt DateTime
+  lastActivityAt DateTime @default(now())
+  
+  createdAt DateTime @default(now())
+  
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([token])
+}
+
+// Tentativas de login para segurança
+model LoginAttempt {
+  id        String   @id @default(cuid())
+  
+  email     String
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  
+  success   Boolean
+  ipAddress String?
+  userAgent String?
+  reason    String?
+  
+  tenantId  String?
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id])
+  
+  createdAt DateTime @default(now())
+  
+  @@index([email, createdAt])
+  @@index([userId])
+  @@index([tenantId])
+  @@index([createdAt])
+}
+
+// --- ENTERPRISE CORE ---
+
+model Tenant {
+  id       String  @id @default(cuid())
+  name     String
+  document String? // CNPJ
+  active   Boolean @default(true)
+
+  // Relations
+  users              User[]
+  accounts           ChartOfAccount[]
+  bankAccounts       BankAccount[]
+  costCenters        CostCenter[]
+  titles             FinancialTitle[]
+  movements          FinancialMovement[]
+  auditLogs          AuditLog[]
+  integrationLogs    IntegrationLog[]
+  integrationConfigs IntegrationConfig[]
+
+  tasks    Task[]
+  subtasks Subtask[]
+
+  persons           Person[]
+  personTypes       PersonType[]
+
+  roles             Role[]
+  loginAttempts     LoginAttempt[]
+  
+  equipments        Equipment[]
+  assets            Asset[]
+  inventoryMovements InventoryMovement[]
+  rentals           Rental[]
+  contractTemplates ContractTemplate[]
+  maintenances      Maintenance[]
+  payments          Payment[]
+  routes            Route[]
+
+  backupJobs        BackupJob[]
+
+
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model AuditLog {
+  id       String @id @default(cuid())
+  action   String // "CREATE", "UPDATE", "DELETE"
+  entity   String // "FinancialTitle", "BankAccount"
+  entityId String
+  details  Json? // { diff: ... }
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, entityId])
+}
+
+// --- CORE FINANCIAL ---
+
+enum AccountType {
+  ASSET // Ativo
+  LIABILITY // Passivo
+  EQUITY // Patrimônio Líquido
+  REVENUE // Receita
+  EXPENSE // Despesa
+}
+
+enum DreCategory {
+  GROSS_REVENUE // Receita Bruta
+  TAXES // Impostos
+  SERVICE_COST // Custo do Serviço Prestado
+  GOODS_COST // Custo de Mercadorias
+  MAINTENANCE_COST // Custo de Manutenção
+  ADMINISTRATIVE_EXPENSE // Despesas Administrativas
+  COMMERCIAL_EXPENSE // Despesas Comerciais
+  FINANCIAL_EXPENSE // Despesas Financeiras
+  PERSONNEL_EXPENSE // Despesas Pessoal
+  LOGISTICS_EXPENSE // Despesas com Logística
+  PROFIT_DISTRIBUTION // Distribuição de Lucros
+  INVESTMENT // Investimentos
+  LOAN_AMORTIZATION // Amortização de Emprestimos
+  ASSET_DEPRECIATION // Depreciação de Ativos
+  OTHER // Outros
+}
+
+enum TransactionType {
+  INCOME // Receita (Entrada)
+  EXPENSE // Despesa (Saída)
+}
+
+enum TitleStatus {
+  OPEN // Aberto
+  PARTIAL // Parcialmente Pago
+  PAID // Pago
+  OVERDUE // Vencido
+  CANCELLED // Cancelado
+}
+
+enum TransactionOrigin {
+  MANUAL
+  RENTAL
+  IMPORT_OFX
+  INTEGRATION_API
+  MAINTENANCE
+}
+
+model ChartOfAccount {
+  id          String       @id @default(cuid())
+  code        String // e.g. "1.01" or "1.01.001"
+  name        String
+  type        AccountType
+  nature      String? // 'DEBIT' or 'CREDIT'
+  dreCategory DreCategory? // Optional, links to DRE line item
+
+  parentId String? // Hierarchy support
+  parent   ChartOfAccount?  @relation("AccountHierarchy", fields: [parentId], references: [id])
+  children ChartOfAccount[] @relation("AccountHierarchy")
+
+  systemDefault Boolean @default(false)
+  active        Boolean @default(true)
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  titles    FinancialTitle[]
+  movements FinancialMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([code, tenantId])
+}
+
+model BankAccount {
+  id            String  @id @default(cuid())
+  name          String // e.g. "Itau Principal", "Caixa Pequeno"
+  bankName      String? // e.g. "Banco Itaú"
+  bankCode      String? // e.g. "341"
+  agency        String?
+  accountNumber String?
+  type          String  @default("CHECKING") // CHECKING, SAVINGS, WALLET
+
+  initialBalance Float @default(0)
+  currentBalance Float @default(0)
+
+  active Boolean @default(true)
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  movements FinancialMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model CostCenter {
+  id     String  @id @default(cuid())
+  code   String
+  name   String
+  active Boolean @default(true)
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  titles FinancialTitle[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([code, tenantId])
+}
+
+model IntegrationConfig {
+  id          String  @id @default(cuid())
+  provider    String // e.g. "ASAAS", "INTER"
+  apiKey      String
+  apiSecret   String?
+  environment String  @default("SANDBOX") // SANDBOX, PRODUCTION
+
+  active Boolean @default(true)
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, tenantId])
+}
+
+model IntegrationLog {
+  id        String @id @default(cuid())
+  provider  String // "ASAAS"
+  direction String // "OUTBOUND" (Use Request), "INBOUND" (Webhook)
+  endpoint  String
+  status    Int // HTTP Code
+  payload   Json?
+  response  Json?
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model FinancialTitle {
+  id          String @id @default(cuid())
+  description String
+
+  // Values
+  originalValue     Float // Valor original do título
+  valueWithInterest Float? // Valor atualizado (com juros/multa)
+  balance           Float // Saldo a pagar/receber (Valor - Total Pago)
+
+  // Dates
+  dueDate        DateTime // Vencimento
+  competenceDate DateTime // Competência (DRE)
+
+  // Classification
+  type   TransactionType // INCOME (Receber), EXPENSE (Pagar)
+  status TitleStatus // OPEN, PARTIAL, PAID, OVERDUE, CANCELLED
+  origin TransactionOrigin @default(MANUAL)
+
+  // Links
+  accountId String
+  account   ChartOfAccount @relation(fields: [accountId], references: [id])
+
+  costCenterId String?
+  costCenter   CostCenter? @relation(fields: [costCenterId], references: [id])
+
+  // Origins
+  rentalId String?
+  rental   Rental? @relation(fields: [rentalId], references: [id])
+  
+  maintenanceId String?
+  maintenance   Maintenance? @relation(fields: [maintenanceId], references: [id])
+
+
+
+  // Billing / Integration
+  billingId     String? // ID Externo (Asaas ID)
+  billingUrl    String? // Link do Boleto
+  billingStatus String? // Status no Gateway
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  movements FinancialMovement[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Performance Indices
+  @@index([tenantId, status])
+  @@index([tenantId, dueDate])
+  @@index([tenantId, competenceDate])
+}
+
+model FinancialMovement {
+  id String @id @default(cuid())
+
+  date   DateTime // Data da movimentação (Caixa)
+  amount Float // Valor efetivo
+  type   TransactionType // INCOME (Entrada), EXPENSE (Saída)
+
+  bankAccountId String
+  bankAccount   BankAccount @relation(fields: [bankAccountId], references: [id])
+
+  // Optional link to a Title (Accountable)
+  titleId String?
+  title   FinancialTitle? @relation(fields: [titleId], references: [id])
+
+  // If no title, must have classification
+  categoryId String?
+  category   ChartOfAccount? @relation(fields: [categoryId], references: [id])
+
+  conciliated Boolean @default(false)
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  bankStatementItems BankStatementItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Performance Indices
+  @@index([tenantId, date])
+  @@index([tenantId, bankAccountId])
+}
+
+// (E) CONCILIAÇÃO
+model BankStatementItem {
+  id          String   @id @default(cuid())
+  date        DateTime
+  amount      Float
+  description String
+  fitId       String   @unique // Unique ID from OFX
+
+  matchedMovementId String?
+  matchedMovement   FinancialMovement? @relation(fields: [matchedMovementId], references: [id])
+
+  createdAt DateTime @default(now())
+}
+
+// --- RENTALS & LOGISTICS ---
+
 enum RentalStatus {
   DRAFT
   SCHEDULED
@@ -171,141 +905,194 @@ enum RentalType {
 }
 
 model Rental {
-  id              String   @id @default(cuid())
-  
+  id String @id @default(cuid())
+
   // Relations
-  personId        String
-  person          Person @relation(fields: [personId], references: [id])
-  
+  personId String
+  person   Person @relation(fields: [personId], references: [id])
+
   deliveryDriverId String?
   deliveryDriver   User?   @relation("DeliveryDriver", fields: [deliveryDriverId], references: [id])
-  
-  returnDriverId   String?
-  returnDriver     User?   @relation("ReturnDriver", fields: [returnDriverId], references: [id])
+
+  returnDriverId String?
+  returnDriver   User?   @relation("ReturnDriver", fields: [returnDriverId], references: [id])
 
   // Dates
-  startDate       DateTime
-  endDate         DateTime
-  durationDays    Int      @default(1)
-  
-  // Type & Status
-  type            RentalType     @default(DAILY)
-  status          RentalStatus   @default(DRAFT)
-  paymentStatus   PaymentStatus  @default(PENDING)
-  
-  // Financials
-  totalAmount     Float    @default(0)
-  amountPaid      Float    @default(0)  // Calculated field: sum of all payments
-  paymentMethod   String?  // Deprecated: kept for backward compatibility
-  totalItems      Float    @default(0) // Sum of items
-  discount        Float    @default(0)
-  deliveryFee     Float    @default(0)
-  returnFee       Float    @default(0)
-  securityDeposit Float    @default(0)
-  
-  // Logistics
-  usageAddress    Json?    // Detailed address structure
-  deliveryAddress String?  // Quick reference string
-  observations    String?
-  
-  // Cancellation
-  cancellationReason String?   // Reason for cancellation
-  cancelledAt        DateTime? // When it was cancelled
-  
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  startDate    DateTime
+  endDate      DateTime
+  durationDays Int      @default(1)
 
-  items           RentalItem[]
-  occurrences     RentalOccurrence[]
-  payments        Payment[]
-  routeStops      RouteStop[]
+  // Type & Status
+  type          RentalType    @default(DAILY)
+  status        RentalStatus  @default(DRAFT)
+  paymentStatus PaymentStatus @default(PENDING)
+
+  // Financials
+  totalAmount     Float   @default(0)
+  amountPaid      Float   @default(0) // Calculated field: sum of all payments
+  paymentMethod   String? // Deprecated: kept for backward compatibility
+  totalItems      Float   @default(0) // Sum of items
+  discount        Float   @default(0)
+  deliveryFee     Float   @default(0)
+  returnFee       Float   @default(0)
+  securityDeposit Float   @default(0)
+
+  // Logistics
+  usageAddress    Json? // Detailed address structure
+  deliveryAddress String? // Quick reference string
+  observations    String?
+
+  // Cancellation
+  cancellationReason String? // Reason for cancellation
+  cancelledAt        DateTime? // When it was cancelled
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  items       RentalItem[]
+  occurrences RentalOccurrence[]
+  payments    Payment[]
+  routeStops  RouteStop[]
+  titles      FinancialTitle[]
+
+  movements InventoryMovement[]
+  
+  @@index([tenantId])
+}
+
+// --- INVENTORY CORE ---
+
+enum AssetStatus {
+  AVAILABLE    // Disponível
+  RENTED       // Alugado
+  MAINTENANCE  // Em manutenção
+  LOST         // Extraviado/Roubado
+  RETIRED      // Baixado/Vendido/Sucateado
 }
 
 
-model RentalItem {
-  id          String    @id @default(cuid())
-  rentalId    String
-  rental      Rental    @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+
+model Asset {
+  id           String      @id @default(cuid())
+  code         String      // Código Patrimonial / Etiqueta (Ex: FUR-001)
+  serialNumber String?     // Serial do Fabricante
   
+  status       AssetStatus @default(AVAILABLE)
+  condition    String?     // Novo, Bom, Regular, Ruim
+  notes        String?
+
+  // Relations
+  equipmentId  String
+  equipment    Equipment   @relation(fields: [equipmentId], references: [id])
+  
+  currentRentalItemId String?
+  
+  tenantId     String?
+  tenant       Tenant?     @relation(fields: [tenantId], references: [id])
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([code, tenantId])
+  @@index([tenantId, status])
+}
+
+model RentalItem {
+  id       String @id @default(cuid())
+  rentalId String
+  rental   Rental @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+
   equipmentId String
   equipment   Equipment @relation(fields: [equipmentId], references: [id])
-  
+
   // Snapshot Data
-  unitPrice   Float
-  quantity    Int
-  totalPrice  Float
-  depositValue Float    @default(0)
+  unitPrice    Float
+  quantity     Int
+  totalPrice   Float
+  depositValue Float @default(0)
 }
 
 model RentalOccurrence {
-  id          String   @id @default(cuid())
-  rentalId    String
-  rental      Rental   @relation(fields: [rentalId], references: [id], onDelete: Cascade)
-  
+  id       String @id @default(cuid())
+  rentalId String
+  rental   Rental @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+
   title       String
   description String?
-  type        String   @default("OTHER") // DAMAGE, LOSS, CLEANING, OTHER
-  cost        Float    @default(0)
-  
-  resolved    Boolean  @default(false)
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-}
+  type        String  @default("OTHER") // DAMAGE, LOSS, CLEANING, OTHER
+  cost        Float   @default(0)
 
-model Payment {
-  id            String   @id @default(cuid())
-  rentalId      String
-  rental        Rental   @relation(fields: [rentalId], references: [id], onDelete: Cascade)
-  
-  amount        Float
-  paymentMethod String
-  paymentDate   DateTime
-  
-  notes         String?
-  
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-}
+  resolved Boolean @default(false)
 
-model Route {
-  id        String   @id @default(cuid())
-  date      DateTime @default(now())
-  
-  driverId  String
-  driver    User     @relation("DriverRoutes", fields: [driverId], references: [id])
-  
-  status    String   @default("DRAFT") // DRAFT, CONFIRMED, IN_PROGRESS, COMPLETED
-  
-  stops     RouteStop[]
-  
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
+model Payment {
+  id       String @id @default(cuid())
+  rentalId String
+  rental   Rental @relation(fields: [rentalId], references: [id], onDelete: Cascade)
+
+  amount        Float
+  paymentMethod String
+  paymentDate   DateTime
+
+  notes String?
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
+model Route {
+  id   String   @id @default(cuid())
+  date DateTime @default(now())
+
+  driverId String
+  driver   User   @relation("DriverRoutes", fields: [driverId], references: [id])
+
+  status String @default("DRAFT") // DRAFT, CONFIRMED, IN_PROGRESS, COMPLETED
+
+  stops RouteStop[]
+
+  tenantId String?
+  tenant   Tenant? @relation(fields: [tenantId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([tenantId])
+}
+
 model RouteStop {
-  id          String   @id @default(cuid())
-  
-  routeId     String
-  route       Route    @relation(fields: [routeId], references: [id], onDelete: Cascade)
-  
-  rentalId    String
-  rental      Rental   @relation(fields: [rentalId], references: [id])
-  
-  type        String   // DELIVERY, RETURN
-  sequence    Int
-  
-  status      String   @default("PENDING") // PENDING, SKIPPED, COMPLETED
+  id String @id @default(cuid())
+
+  routeId String
+  route   Route  @relation(fields: [routeId], references: [id], onDelete: Cascade)
+
+  rentalId String
+  rental   Rental @relation(fields: [rentalId], references: [id])
+
+  type     String // DELIVERY, RETURN
+  sequence Int
+
+  status      String    @default("PENDING") // PENDING, SKIPPED, COMPLETED
   completedAt DateTime?
-  
+
   // Proof of Delivery
-  signature   String?  // Base64 string
+  signature    String? // Base64 string
   receiverName String?
-  photos      String[]
-  geoLat      Float?
-  geoLng      Float?
-  
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  photos       String[]
+  geoLat       Float?
+  geoLng       Float?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 

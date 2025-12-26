@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, Users, Package, FileText, Settings, LogOut, Wrench, BarChart3, Truck, Home, Archive, X, User, Menu, Bell } from 'lucide-react'
+import { LayoutDashboard, Users, Package, FileText, Settings, LogOut, Wrench, BarChart3, Truck, Home, Archive, X, User, Menu, Bell, ListTodo, DollarSign } from 'lucide-react'
 import { useState } from 'react'
 import { signOut } from 'next-auth/react'
 import Header from '@/components/layout/Header'
@@ -17,12 +17,17 @@ export default function DashboardLayout({
 
     const navItems = [
         { href: '/dashboard', label: 'Dashboard', icon: Home },
-        { href: '/dashboard/inventory', label: 'Inventário', icon: Archive },
-        { href: '/dashboard/contracts', label: 'Contratos / Locações', icon: FileText },
-        { href: '/dashboard/persons', label: 'Pessoas', icon: Users },
-        { href: '/dashboard/maintenance', label: 'Manutenção', icon: Wrench },
-        { href: '/dashboard/reports', label: 'Relatórios', icon: BarChart3 },
+        { href: '/dashboard/tasks', label: 'Tarefas', icon: ListTodo },
         { href: '/dashboard/routes', label: 'Rotas', icon: Truck },
+        { href: '/dashboard/contracts', label: 'Contratos / Locações', icon: FileText },
+        { href: '/dashboard/inventory', label: 'Inventário', icon: Archive },
+        { href: '/dashboard/maintenance', label: 'Manutenção', icon: Wrench },
+        { href: '/dashboard/financial', label: 'Financeiro', icon: DollarSign },
+        { href: '/dashboard/persons', label: 'Pessoas', icon: Users },
+        { href: '/dashboard/reports', label: 'Relatórios', icon: BarChart3 },
+        { section: 'Configurações' },
+        { href: '/dashboard/settings/users', label: 'Usuários', icon: User },
+        { href: '/dashboard/settings/roles', label: 'Perfis de Acesso', icon: Settings },
     ]
 
     const isActive = (href: string) => pathname === href
@@ -48,7 +53,19 @@ export default function DashboardLayout({
 
                     {/* Navigation */}
                     <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-                        {navItems.map((item) => {
+                        {navItems.map((item, index) => {
+                            // Section header
+                            if ('section' in item) {
+                                return (
+                                    <div key={`section-${index}`} className="pt-4 pb-2 px-4">
+                                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                                            {item.section}
+                                        </p>
+                                    </div>
+                                )
+                            }
+
+                            // Regular nav item
                             const Icon = item.icon
                             return (
                                 <Link

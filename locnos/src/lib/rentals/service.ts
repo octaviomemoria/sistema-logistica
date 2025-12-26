@@ -26,7 +26,7 @@ export interface StockCheckResult {
 }
 
 export class RentalService {
-    
+
     // 1. Calculate Prices
     static calculateTotals(input: RentalCalculationInput) {
         const duration = Math.ceil((input.endDate.getTime() - input.startDate.getTime()) / (1000 * 60 * 60 * 24))
@@ -46,7 +46,7 @@ export class RentalService {
         // Strategy: We will treat `unitPrice` as "Price per Period" for now to respect current UI,
         // or we imply it is per day. Let's stick to "Price per Period" for MVP compatibility unless specifically asked to change UI to daily rate.
         // The prompt says "unit_price: DECIMAL (Preço unitário cobrado no momento da locação - snapshot de preço)".
-        
+
         const finalTotal = itemsTotal + (input.deliveryFee || 0) + (input.returnFee || 0) - (input.discount || 0)
 
         return {
@@ -56,7 +56,7 @@ export class RentalService {
         }
     }
 
-    // 2. Validate Stock (Date-based)
+    // 2. Validate Stock (Date-based) - INCLUDES MAINTENANCE CHECK
     static async validateStock(items: { equipmentId: string; quantity: number }[], startDate: Date, endDate: Date, excludeRentalId?: string): Promise<StockCheckResult> {
         const blockingItems = []
 
@@ -64,8 +64,7 @@ export class RentalService {
             const equipment = await prisma.equipment.findUnique({ where: { id: item.equipmentId } })
             if (!equipment) continue
 
-            // Find overlapping rentals
-            // Statuses that consume stock: RESERVED, ACTIVE, LATE
+            // Find overlapping rentals (statuses that consume stock: SCHEDULED, ACTIVE, LATE)
             const overlapping = await prisma.rentalItem.findMany({
                 where: {
                     equipmentId: item.equipmentId,
@@ -73,14 +72,32 @@ export class RentalService {
                     rental: {
                         status: { in: ['SCHEDULED', 'ACTIVE', 'LATE'] },
                         OR: [
-                             { startDate: { lte: endDate }, endDate: { gte: startDate } }
+                            { startDate: { lte: endDate }, endDate: { gte: startDate } }
                         ]
                     }
                 }
             })
 
             const rentedCount = overlapping.reduce((acc, i) => acc + i.quantity, 0)
-            const available = equipment.totalQty - rentedCount
+
+            // CRITICAL FIX: Check for maintenance overlaps
+            const maintenanceOverlaps = await prisma.maintenance.findMany({
+                where: {
+                    equipmentId: item.equipmentId,
+                    status: { in: ['OPEN', 'WAITING_PARTS', 'WAITING_SERVICE'] }, // Active maintenances
+                    OR: [
+                        { startDate: { lte: endDate }, endDate: { gte: startDate } },
+                        { startDate: { lte: endDate }, endDate: null } // Open-ended maintenance
+                    ]
+                }
+            })
+
+            // For each open maintenance, we assume 1 unit is blocked
+            // (This is simplified. For proper asset tracking, we'd check specific assets)
+            const maintenanceCount = maintenanceOverlaps.length
+
+            const totalBlocked = rentedCount + maintenanceCount
+            const available = equipment.totalQty - totalBlocked
 
             if (item.quantity > available) {
                 blockingItems.push({
@@ -100,9 +117,9 @@ export class RentalService {
 
     // 3. Status Transition
     static async transitionStatus(rentalId: string, newStatus: RentalStatus) {
-        const rental = await prisma.rental.findUnique({ 
+        const rental = await prisma.rental.findUnique({
             where: { id: rentalId },
-            include: { items: true } 
+            include: { items: true }
         })
         if (!rental) throw new Error('Rental not found')
 
@@ -115,7 +132,7 @@ export class RentalService {
                 rental.endDate,
                 rentalId
             )
-            
+
             if (!stockCheck.available) {
                 const names = stockCheck.blockingItems.map(i => i.name).join(', ')
                 throw new Error(`Estoque insuficiente para: ${names}`)
@@ -133,15 +150,15 @@ export class RentalService {
         // Let's keep the hybrid approach:
         // status ACTIVE/LATE -> Equipment.rentedQty += qty
         // status COMPLETED -> Equipment.rentedQty -= qty
-        
+
         if (newStatus === 'ACTIVE' && rental.status !== 'ACTIVE') {
-             for (const item of rental.items) {
+            for (const item of rental.items) {
                 await prisma.equipment.update({ where: { id: item.equipmentId }, data: { rentedQty: { increment: item.quantity } } })
-             }
+            }
         } else if ((newStatus === 'COMPLETED' || newStatus === 'CANCELLED') && rental.status === 'ACTIVE') {
-             for (const item of rental.items) {
+            for (const item of rental.items) {
                 await prisma.equipment.update({ where: { id: item.equipmentId }, data: { rentedQty: { decrement: item.quantity } } })
-             }
+            }
         }
     }
 }

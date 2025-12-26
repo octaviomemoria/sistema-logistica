@@ -12,6 +12,7 @@ export default function NewMaintenancePage() {
     const { showToast } = useToast()
     const [loading, setLoading] = useState(false)
     const [equipments, setEquipments] = useState<any[]>([])
+    const [providers, setProviders] = useState<any[]>([])
 
     // Form
     const [equipmentId, setEquipmentId] = useState('')
@@ -19,22 +20,37 @@ export default function NewMaintenancePage() {
     const [description, setDescription] = useState('')
     const [cost, setCost] = useState(0)
 
+    // New Fields
+    const [executorType, setExecutorType] = useState('INTERNAL') // INTERNAL, EXTERNAL
+    const [providerId, setProviderId] = useState('')
+
     useEffect(() => {
         getEquipments('ALL').then(res => {
             if (res.success) setEquipments(res.equipments || [])
+        })
+
+        // Load Potential Providers (Active Persons)
+        // We might want to filter by a specific PersonType like "Service Provider" in the future
+        import('../../persons/actions').then(({ getPersons }) => {
+            getPersons('ACTIVE').then(res => {
+                if (res.success) setProviders(res.persons || [])
+            })
         })
     }, [])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
         if (!equipmentId) return showToast('error', 'Selecione um equipamento')
+        if (executorType === 'EXTERNAL' && !providerId) return showToast('error', 'Selecione o prestador de serviço')
 
         setLoading(true)
         const res = await createMaintenance({
             equipmentId,
             type,
             description,
-            cost
+            cost,
+            executorType,
+            providerId: executorType === 'EXTERNAL' ? providerId : undefined
         })
 
         if (res.success) {
@@ -75,7 +91,7 @@ export default function NewMaintenancePage() {
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="label">Tipo</label>
+                            <label className="label">Tipo de Manutenção</label>
                             <div className="flex gap-2">
                                 <button
                                     type="button"
@@ -94,16 +110,54 @@ export default function NewMaintenancePage() {
                             </div>
                         </div>
                         <div>
-                            <label className="label">Custo Estimado</label>
-                            <div className="relative">
-                                <span className="absolute left-3 top-2.5 text-gray-500">R$</span>
-                                <input
-                                    type="number"
-                                    className="input pl-10"
-                                    value={cost}
-                                    onChange={e => setCost(parseFloat(e.target.value) || 0)}
-                                />
+                            <label className="label">Execução</label>
+                            <div className="flex gap-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setExecutorType('INTERNAL')}
+                                    className={`flex-1 py-2 px-3 rounded border text-sm font-medium flex items-center justify-center gap-2 ${executorType === 'INTERNAL' ? 'bg-gray-100 border-gray-300 text-gray-800 ring-1 ring-gray-300' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                                >
+                                    Interna
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setExecutorType('EXTERNAL')}
+                                    className={`flex-1 py-2 px-3 rounded border text-sm font-medium flex items-center justify-center gap-2 ${executorType === 'EXTERNAL' ? 'bg-orange-50 border-orange-200 text-orange-700 ring-1 ring-orange-200' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+                                >
+                                    Externa
+                                </button>
                             </div>
+                        </div>
+                    </div>
+
+                    {executorType === 'EXTERNAL' && (
+                        <div>
+                            <label className="label">Prestador de Serviço (Fornecedor)</label>
+                            <select
+                                className="input"
+                                value={providerId}
+                                onChange={e => setProviderId(e.target.value)}
+                                required
+                            >
+                                <option value="">Selecione o fornecedor/mecânico...</option>
+                                {providers.map(p => (
+                                    <option key={p.id} value={p.id}>{p.name} {p.tradeName ? `(${p.tradeName})` : ''}</option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-gray-500 mt-1">O prestador deve estar cadastrado em "Pessoas"</p>
+                        </div>
+                    )}
+
+                    <div>
+                        <label className="label">Custo Estimado</label>
+                        <div className="relative">
+                            <span className="absolute left-3 top-2.5 text-gray-500">R$</span>
+                            <input
+                                type="number"
+                                className="input pl-10"
+                                value={cost}
+                                onChange={e => setCost(parseFloat(e.target.value) || 0)}
+                            />
                         </div>
                     </div>
 

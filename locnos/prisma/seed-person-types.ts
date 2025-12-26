@@ -16,9 +16,20 @@ async function main() {
 
     for (const type of personTypes) {
         await prisma.personType.upsert({
-            where: { name: type.name },
-            update: {},
-            create: type,
+            where: {
+                name_tenantId: {
+                    name: type.name,
+                    tenantId: null  // System types don't belong to a tenant
+                }
+            },
+            update: {
+                color: type.color,  // Update color if it changes
+                system: type.system
+            },
+            create: {
+                ...type,
+                tenantId: null  // Explicitly set null for system types
+            },
         })
         console.log(`✓ Created/Updated PersonType: ${type.name}`)
     }

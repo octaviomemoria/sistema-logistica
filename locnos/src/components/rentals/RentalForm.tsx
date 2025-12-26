@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Calendar, Search, Plus, Trash2, Truck, User, Save, MapPin, Copy, Box, ImageIcon, AlertTriangle, FileText } from 'lucide-react'
+import { Calendar, Search, Plus, Trash2, Truck, User, Save, MapPin, Copy, Box, ImageIcon, AlertTriangle, FileText, X } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { createRental, updateRental, updateRentalStatus, getDrivers, RentalInput, RentalItemInput } from '@/app/dashboard/rentals/actions'
 import { getPersons } from '@/app/dashboard/persons/actions'
@@ -12,6 +12,9 @@ import RentalDriverModal from './RentalDriverModal'
 import PaymentHistory from './PaymentHistory'
 import PaymentRegistration from './PaymentRegistration'
 import { addPayment } from '../../app/dashboard/rentals/payment-actions'
+import SearchableSelect from '@/components/ui/SearchableSelect'
+import PersonForm from '@/components/persons/PersonForm'
+import AddressAutocomplete from '@/components/ui/AddressAutocomplete'
 
 interface RentalFormProps {
     initialData?: any
@@ -29,6 +32,7 @@ export default function RentalForm({ initialData }: RentalFormProps) {
     const router = useRouter()
     const { showToast } = useToast()
     const [modalType, setModalType] = useState<'NONE' | 'OCCURRENCE' | 'DELIVERY' | 'RETURN'>('NONE')
+    const [showQuickAdd, setShowQuickAdd] = useState(false)
 
     // Data Sources
     const [customers, setCustomers] = useState<any[]>([])
@@ -259,16 +263,27 @@ export default function RentalForm({ initialData }: RentalFormProps) {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <div className="lg:col-span-1">
                         <label className="label">Cliente *</label>
-                        <select
-                            className="input"
-                            value={selectedCustomer}
-                            onChange={e => setSelectedCustomer(e.target.value)}
-                        >
-                            <option value="">Selecione...</option>
-                            {customers.map(c => (
-                                <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                        </select>
+                        <div className="flex gap-2">
+                            <div className="flex-1">
+                                <SearchableSelect
+                                    value={selectedCustomer}
+                                    onChange={setSelectedCustomer}
+                                    options={customers.map(c => ({
+                                        value: c.id,
+                                        label: c.name,
+                                        subLabel: c.document
+                                    }))}
+                                    placeholder="Buscar cliente..."
+                                />
+                            </div>
+                            <button
+                                onClick={() => setShowQuickAdd(true)}
+                                className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                title="Cadastrar Cliente Rápido"
+                            >
+                                <Plus size={20} />
+                            </button>
+                        </div>
                     </div>
 
                     <div className="lg:col-span-1">
@@ -278,15 +293,11 @@ export default function RentalForm({ initialData }: RentalFormProps) {
                                 <Copy size={12} /> Copiar Cadastro
                             </button>
                         </div>
-                        <div className="relative">
-                            <MapPin className="absolute left-3 top-2.5 text-gray-400" size={16} />
-                            <input
-                                className="input pl-9"
-                                value={deliveryAddress}
-                                onChange={e => setDeliveryAddress(e.target.value)}
-                                placeholder="Rua, Número, Bairro..."
-                            />
-                        </div>
+                        <AddressAutocomplete
+                            value={deliveryAddress}
+                            onChange={setDeliveryAddress}
+                            placeholder="Rua, Número, Bairro..."
+                        />
                     </div>
 
                     <div>
@@ -652,6 +663,30 @@ export default function RentalForm({ initialData }: RentalFormProps) {
                     </>
                 )
             }
+
+            {/* Quick Add Modal */}
+            {showQuickAdd && (
+                <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+                        <div className="flex items-center justify-between p-4 border-b">
+                            <h3 className="text-lg font-bold text-gray-800">Novo Cliente</h3>
+                            <button onClick={() => setShowQuickAdd(false)} className="text-gray-400 hover:text-gray-600">
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <div className="p-6">
+                            <PersonForm
+                                onCancel={() => setShowQuickAdd(false)}
+                                onSuccess={(newPerson: any) => {
+                                    setCustomers(prev => [newPerson, ...prev])
+                                    setSelectedCustomer(newPerson.id)
+                                    setShowQuickAdd(false)
+                                }}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     )
 }

@@ -24,9 +24,11 @@ interface PersonType {
 interface PersonFormProps {
     initialData?: any
     isEditing?: boolean
+    onSuccess?: (person: any) => void
+    onCancel?: () => void
 }
 
-export default function PersonForm({ initialData, isEditing = false }: PersonFormProps) {
+export default function PersonForm({ initialData, isEditing = false, onSuccess, onCancel }: PersonFormProps) {
     const router = useRouter()
     const { showToast } = useToast()
     const [loading, setLoading] = useState(false)
@@ -80,7 +82,7 @@ export default function PersonForm({ initialData, isEditing = false }: PersonFor
         setFormData(prev => ({
             ...prev,
             personTypeIds: prev.personTypeIds.includes(typeId)
-                ? prev.personTypeIds.filter(id => id !== typeId)
+                ? prev.personTypeIds.filter((id: string) => id !== typeId)
                 : [...prev.personTypeIds, typeId]
         }))
     }

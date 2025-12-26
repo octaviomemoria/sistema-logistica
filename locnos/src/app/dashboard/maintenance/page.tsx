@@ -59,6 +59,7 @@ export default async function MaintenancePage({
                                 <th className="px-6 py-4 font-semibold text-gray-600">Data Início</th>
                                 <th className="px-6 py-4 font-semibold text-gray-600">Custo</th>
                                 <th className="px-6 py-4 font-semibold text-gray-600">Status</th>
+                                <th className="px-6 py-4 font-semibold text-gray-600">Execução</th>
                                 <th className="px-6 py-4 font-semibold text-gray-600">Ações</th>
                             </tr>
                         </thead>
@@ -89,14 +90,28 @@ export default async function MaintenancePage({
                                             R$ {m.cost.toFixed(2)}
                                         </td>
                                         <td className="px-6 py-4">
-                                            {m.status === 'OPEN' ? (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700">
-                                                    <Clock size={12} /> Em Andamento
-                                                </span>
+                                            {(() => {
+                                                switch (m.status) {
+                                                    case 'OPEN':
+                                                        return <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700"><Clock size={12} /> Aberta</span>
+                                                    case 'WAITING_PARTS':
+                                                        return <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-700"><AlertTriangle size={12} /> Aguardando Peças</span>
+                                                    case 'WAITING_SERVICE':
+                                                        return <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-700"><Clock size={12} /> Aguardando Serviço</span>
+                                                    case 'COMPLETED':
+                                                        return <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700"><CheckCircle size={12} /> Concluído</span>
+                                                    case 'CANCELLED':
+                                                        return <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-700">Cancelado</span>
+                                                    default:
+                                                        return <span>{m.status}</span>
+                                                }
+                                            })()}
+                                        </td>
+                                        <td className="px-6 py-4 text-xs text-gray-500">
+                                            {m.executorType === 'EXTERNAL' ? (
+                                                <span title={m.provider?.name || 'Fornecedor Externo'}>Externo: {m.provider?.name?.split(' ')[0] || '-'}</span>
                                             ) : (
-                                                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                                                    <CheckCircle size={12} /> Concluído
-                                                </span>
+                                                'Interno'
                                             )}
                                         </td>
                                         <td className="px-6 py-4">

@@ -1,11 +1,19 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
 
 export async function getFinancialStats() {
+    const session = await getServerSession(authOptions)
+    const tenantId = session?.user?.tenantId
+
+    if (!tenantId) return { totalRevenue: 0, totalPaid: 0, count: 0, pendingAmount: 0, revenueHistory: [] }
+
     try {
         const rentals = await prisma.rental.findMany({
             where: {
+                tenantId: tenantId,
                 status: { not: 'CANCELLED' }
             },
             select: {
@@ -40,25 +48,24 @@ export async function getFinancialStats() {
     }
 }
 
-export async function getABCAnalysis() {
-    // 1. Get all rental items
-    // This query might be heavy, grouping in DB is better but Prisma GroupBy for relations is tricky
-    // Doing simpler approach: Get Top Rented Equipments from Equipment Table counters (we update them?)
-    // Actually, we should aggregate RentalItems.
+export async function getABCAnalysis(startDate?: Date | string, endDate?: Date | string) {
+    const session = await getServerSession(authOptions)
+    const tenantId = session?.user?.tenantId
 
-    /* 
-       We need to know:
-       - Equipment Name
-       - Total Revenue Generated (Quantity * UnitPrice)
-       - Frequency (Count)
-    */
+    if (!tenantId) return { params: [] }
 
-    // Since we don't store historical revenue per item easily without deep scan, 
-    // we'll approximate using RentalItem + Rental status != CANCELLED
+    const dateFilter: any = {}
+    if (startDate) dateFilter.gte = new Date(startDate)
+    if (endDate) dateFilter.lte = new Date(endDate)
 
+    // 1. Get all rental items filtered by tenant and date
     const rentItems = await prisma.rentalItem.findMany({
         where: {
-            rental: { status: { not: 'CANCELLED' } }
+            rental: {
+                tenantId: tenantId,
+                status: { not: 'CANCELLED' },
+                startDate: Object.keys(dateFilter).length > 0 ? dateFilter : undefined
+            }
         },
         include: {
             equipment: true
@@ -89,7 +96,7 @@ export async function getABCAnalysis() {
 
     const abc = sorted.map(item => {
         accumulated += item.revenue
-        const percentage = (accumulated / totalRev) * 100
+        const percentage = totalRev > 0 ? (accumulated / totalRev) * 100 : 0
         let category = 'C'
         if (percentage <= 80) category = 'A'
         else if (percentage <= 95) category = 'B'
@@ -97,12 +104,20 @@ export async function getABCAnalysis() {
         return { ...item, category, percentage }
     })
 
-    return { params: abc.slice(0, 20) } // Return top 20 for chart
+    return { params: abc.slice(0, 50) } // Return top 50
 }
 
 export async function getInventoryStats() {
+    const session = await getServerSession(authOptions)
+    const tenantId = session?.user?.tenantId
+
+    if (!tenantId) return { totalItems: 0, rentedItems: 0, availableItems: 0, totalValue: 0 }
+
     try {
         const equipment = await prisma.equipment.aggregate({
+            where: {
+                tenantId: tenantId
+            },
             _sum: {
                 totalQty: true,
                 rentedQty: true,
@@ -124,3 +139,65 @@ export async function getInventoryStats() {
         return { totalItems: 0, rentedItems: 0, availableItems: 0, totalValue: 0 }
     }
 }
+
+export async function getDefaulters() {
+    const session = await getServerSession(authOptions)
+    const tenantId = session?.user?.tenantId
+
+    if (!tenantId) return []
+
+    // Find overdue titles
+    const overdueTitles = await prisma.financialTitle.findMany({
+        where: {
+            tenantId: tenantId,
+            status: 'OVERDUE',
+            type: 'INCOME' // Receivables usually
+        },
+        include: {
+            rental: {
+                include: { person: true }
+            },
+            tenant: true
+        },
+        orderBy: { dueDate: 'asc' }
+    })
+
+    // Group by Person
+    const defaultersMap = new Map<string, {
+        personId: string,
+        name: string,
+        totalDebt: number,
+        titlesCount: number,
+        oldestDebt: Date
+    }>()
+
+    for (const title of overdueTitles) {
+        // Person comes from Rental usually, or we might need personId on Title if we link directly
+        // Currently Title has rentalId. 
+        // If title is manual, we might not have person. 
+        // We need Person on FinancialTitle eventually? 
+        // For now, use Rental's person.
+
+        const person = title.rental?.person
+        if (!person) continue
+
+        const current = defaultersMap.get(person.id) || {
+            personId: person.id,
+            name: person.name,
+            totalDebt: 0,
+            titlesCount: 0,
+            oldestDebt: title.dueDate
+        }
+
+        current.totalDebt += title.balance
+        current.titlesCount += 1
+        if (title.dueDate < current.oldestDebt) {
+            current.oldestDebt = title.dueDate
+        }
+
+        defaultersMap.set(person.id, current)
+    }
+
+    return Array.from(defaultersMap.values()).sort((a, b) => b.totalDebt - a.totalDebt)
+}
+

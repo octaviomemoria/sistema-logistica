@@ -1,0 +1,8 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilos customizados adicionais podem vir aqui */
+body {
+  @apply bg-secondary text-text-primary;
+}

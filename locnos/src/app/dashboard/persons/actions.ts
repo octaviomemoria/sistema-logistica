@@ -1,16 +1,37 @@
 'use server'
 
-import { PrismaClient } from '@prisma/client'
+import { prisma } from '@/lib/prisma'
 import { revalidatePath } from 'next/cache'
-
-const prisma = new PrismaClient()
+import { getServerSession } from "next-auth"
+import { authOptions } from "@/lib/auth"
+import { Prisma } from '@prisma/client'
 
 export type PersonFilter = 'ALL' | 'ACTIVE' | 'INACTIVE' | 'DEFAULTER'
+
+// Helper to get current tenant
+async function getTenantAuth() {
+    const session = await getServerSession(authOptions)
+    if (!session?.user?.tenantId) {
+        throw new Error('Unauthorized: No tenant found')
+    }
+    return {
+        tenantId: session.user.tenantId,
+        userId: session.user.id
+    }
+}
 
 // Get all PersonTypes
 export async function getPersonTypes() {
     try {
+        const { tenantId } = await getTenantAuth()
+
         const personTypes = await prisma.personType.findMany({
+            where: {
+                OR: [
+                    { system: true },
+                    { tenantId }
+                ]
+            },
             orderBy: { name: 'asc' }
         })
         return { success: true, personTypes }
@@ -23,11 +44,14 @@ export async function getPersonTypes() {
 // Create a new PersonType (custom type)
 export async function createPersonType(name: string, color: string) {
     try {
+        const { tenantId } = await getTenantAuth()
+
         const personType = await prisma.personType.create({
             data: {
                 name,
                 color,
-                system: false // Custom types are never system types
+                system: false,
+                tenantId
             }
         })
         revalidatePath('/dashboard/persons')
@@ -41,10 +65,21 @@ export async function createPersonType(name: string, color: string) {
 // Delete a PersonType (only non-system types)
 export async function deletePersonType(id: string) {
     try {
-        // Check if it's a system type
-        const personType = await prisma.personType.findUnique({ where: { id } })
-        if (personType?.system) {
+        const { tenantId } = await getTenantAuth()
+
+        // Check if it's a system type or belongs to another tenant
+        const personType = await prisma.personType.findUnique({
+            where: { id }
+        })
+
+        if (!personType) return { success: false, error: 'Type not found' }
+
+        if (personType.system) {
             return { success: false, error: 'Cannot delete system types' }
+        }
+
+        if (personType.tenantId !== tenantId) {
+            return { success: false, error: 'Unauthorized' }
         }
 
         await prisma.personType.delete({ where: { id } })
@@ -59,10 +94,19 @@ export async function deletePersonType(id: string) {
 // Assign PersonType to a Person
 export async function assignPersonType(personId: string, typeId: string) {
     try {
+        const { tenantId } = await getTenantAuth()
+
+        // Verify person belongs to tenant
+        const person = await prisma.person.findUnique({
+            where: { id, tenantId }
+        })
+        if (!person) return { success: false, error: 'Person not found' }
+
         await prisma.personPersonType.create({
             data: {
                 personId,
-                personTypeId: typeId
+                personTypeId: typeId,
+                tenantId
             }
         })
         revalidatePath('/dashboard/persons')
@@ -76,6 +120,17 @@ export async function assignPersonType(personId: string, typeId: string) {
 // Remove PersonType from a Person
 export async function removePersonType(personId: string, typeId: string) {
     try {
+        const { tenantId } = await getTenantAuth()
+
+        // Verify ownership via delete where clause implicitly or explicit check
+        // For safety, we check ownership of the relation if possible, or usually just rely on person ownership
+        // But here we can delete by composite ID. 
+        // Better to check person first.
+        const person = await prisma.person.findUnique({
+            where: { id: personId, tenantId }
+        })
+        if (!person) return { success: false, error: 'Person not found' }
+
         await prisma.personPersonType.delete({
             where: {
                 personId_personTypeId: {
@@ -95,7 +150,11 @@ export async function removePersonType(personId: string, typeId: string) {
 // Get all Persons with their types
 export async function getPersons(filter: PersonFilter = 'ALL', search?: string, typeIds?: string[]) {
     try {
-        const where: any = {}
+        const { tenantId } = await getTenantAuth()
+
+        const where: Prisma.PersonWhereInput = {
+            tenantId
+        }
 
         // Filter by status
         if (filter === 'ACTIVE') {
@@ -147,13 +206,18 @@ export async function getPersons(filter: PersonFilter = 'ALL', search?: string, 
 
 export async function createPerson(data: any) {
     try {
-        // Validate unique document
-        const existing = await prisma.person.findUnique({
-            where: { document: data.document }
+        const { tenantId, userId } = await getTenantAuth()
+
+        // Validate unique document WITHIN TENANT
+        const existing = await prisma.person.findFirst({
+            where: {
+                document: data.document,
+                tenantId
+            }
         })
 
         if (existing) {
-            return { success: false, error: 'Documento (CPF/CNPJ) já cadastrado' }
+            return { success: false, error: 'Documento (CPF/CNPJ) já cadastrado nesta empresa' }
         }
 
         // Extract personTypeIds from data
@@ -164,9 +228,12 @@ export async function createPerson(data: any) {
                 ...personData,
                 status: 'ACTIVE',
                 active: true,
+                tenantId,
+                createdById: userId,
                 personTypes: personTypeIds && personTypeIds.length > 0 ? {
                     create: personTypeIds.map((typeId: string) => ({
-                        personTypeId: typeId
+                        personTypeId: typeId,
+                        tenantId
                     }))
                 } : undefined
             },
@@ -179,6 +246,9 @@ export async function createPerson(data: any) {
             }
         })
 
+        // TODO: Create Audit Log here
+        // await createAuditLog({ action: 'CREATE', entity: 'Person', entityId: person.id, ... })
+
         revalidatePath('/dashboard/persons')
         return { success: true, person }
     } catch (error: any) {
@@ -189,6 +259,14 @@ export async function createPerson(data: any) {
 
 export async function updatePerson(id: string, data: any) {
     try {
+        const { tenantId } = await getTenantAuth()
+
+        // Verify existence and ownership
+        const existing = await prisma.person.findUnique({
+            where: { id, tenantId }
+        })
+        if (!existing) return { success: false, error: 'Person not found' }
+
         // Extract personTypeIds from data
         const { personTypeIds, ...personData } = data
 
@@ -196,7 +274,7 @@ export async function updatePerson(id: string, data: any) {
         if (personTypeIds !== undefined) {
             // Delete all existing associations
             await prisma.personPersonType.deleteMany({
-                where: { personId: id }
+                where: { personId: id } // We could verify tenantId implicitly via Person logic, but relations don't necessarily have tenantId filter in deleteMany unless we store it. We DO store it now.
             })
 
             // Create new associations
@@ -204,7 +282,8 @@ export async function updatePerson(id: string, data: any) {
                 await prisma.personPersonType.createMany({
                     data: personTypeIds.map((typeId: string) => ({
                         personId: id,
-                        personTypeId: typeId
+                        personTypeId: typeId,
+                        tenantId
                     }))
                 })
             }
@@ -232,6 +311,12 @@ export async function updatePerson(id: string, data: any) {
 
 export async function togglePersonStatus(id: string, active: boolean) {
     try {
+        const { tenantId } = await getTenantAuth()
+
+        // Verify ownership
+        const existing = await prisma.person.findUnique({ where: { id, tenantId } })
+        if (!existing) return { success: false, error: 'Person not found' }
+
         await prisma.person.update({
             where: { id },
             data: {
@@ -250,6 +335,11 @@ export async function togglePersonStatus(id: string, active: boolean) {
 
 export async function setAsDefaulter(id: string, isDefaulter: boolean) {
     try {
+        const { tenantId } = await getTenantAuth()
+
+        const existing = await prisma.person.findUnique({ where: { id, tenantId } })
+        if (!existing) return { success: false, error: 'Person not found' }
+
         await prisma.person.update({
             where: { id },
             data: {
@@ -267,8 +357,10 @@ export async function setAsDefaulter(id: string, isDefaulter: boolean) {
 
 export async function getPersonById(id: string) {
     try {
+        const { tenantId } = await getTenantAuth()
+
         const person = await prisma.person.findUnique({
-            where: { id },
+            where: { id, tenantId },
             include: {
                 personTypes: {
                     include: {
